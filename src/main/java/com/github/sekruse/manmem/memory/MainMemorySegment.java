@@ -2,6 +2,8 @@ package com.github.sekruse.manmem.memory;
 
 import com.github.sekruse.manmem.util.Queueable;
 
+import java.nio.ByteBuffer;
+
 /**
  * This class encapsulates an actual amount of main memory.
  */
@@ -71,6 +73,7 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
 
     /**
      * Assigns this segment to a new owner.
+     *
      * @param owner the {@link Memory} to assign this segment to
      */
     public void assignTo(Memory owner) {
@@ -87,5 +90,28 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
         this.owner = owner;
         this.state = SegmentState.DIRTY;
         this.owner.setMainMemorySegment(this);
+    }
+
+    /**
+     * Experimental API.
+     *
+     * @return the payload of this memory segment as {@link ByteBuffer}
+     */
+    public ByteBuffer asByteBuffer() {
+        return ByteBuffer.wrap(this.payload, 0, this.payloadLimit);
+    }
+
+    /**
+     * Experimental API. Updates the payload size by the limit of this buffer.
+     *
+     * @param buf the buffer to update from; must be retrieved by {@link #asByteBuffer()}
+     * @see ByteBuffer#limit()
+     */
+    public void update(ByteBuffer buf) {
+        if (!buf.hasArray() || buf.array() != this.payload) {
+            throw new IllegalArgumentException("Buffer does belong to this main memory segment.");
+        }
+
+        this.payloadLimit = buf.limit();
     }
 }

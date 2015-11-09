@@ -1,4 +1,4 @@
-package com.github.sekruse.manmem.util;
+package com.github.sekruse.manmem.manager;
 
 import com.github.sekruse.manmem.manager.CapacityExceededException;
 import com.github.sekruse.manmem.manager.GlobalMemoryManager;

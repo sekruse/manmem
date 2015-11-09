@@ -3,6 +3,7 @@ package com.github.sekruse.manmem.manager;
 import com.github.sekruse.manmem.manager.capabilities.ReturnMemoryCapability;
 import com.github.sekruse.manmem.memory.MainMemorySegment;
 import com.github.sekruse.manmem.memory.Memory;
+import com.github.sekruse.manmem.util.QueueableQueue;
 
 /**
  * A global memory manager is a first class memory manager, i.e., it does not depend on other memory managers.
@@ -24,6 +25,11 @@ public class GlobalMemoryManager implements MemoryManager {
      * The capacity of a default piece of memory.
      */
     private final int defaultMemorySize;
+
+    /**
+     * A queue of {@link MainMemorySegment}s that could be spilled to disk.
+     */
+    private final QueueableQueue<MainMemorySegment> spillQueue = new QueueableQueue<>();
 
     /**
      * This capability allows to return memory.
