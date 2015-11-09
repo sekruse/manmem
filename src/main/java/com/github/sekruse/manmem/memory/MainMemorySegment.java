@@ -16,7 +16,7 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
      * {@link MainMemorySegment}s can be queued according to {@link Queueable}. These fields realize the link requirements
      * of that interface.
      */
-    private MainMemorySegment previous, next;
+    private Queueable<MainMemorySegment> previous, next;
 
     /**
      * The current state of this segment.
@@ -43,22 +43,22 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
     }
 
     @Override
-    public void setPreviousElement(MainMemorySegment element) {
+    public void setPreviousElement(Queueable<MainMemorySegment> element) {
         this.previous = element;
     }
 
     @Override
-    public void setNextElement(MainMemorySegment element) {
+    public void setNextElement(Queueable<MainMemorySegment> element) {
         this.next = element;
     }
 
     @Override
-    public MainMemorySegment getNextElement() {
+    public Queueable<MainMemorySegment> getNextElement() {
         return this.next;
     }
 
     @Override
-    public MainMemorySegment getPreviousElement() {
+    public Queueable<MainMemorySegment> getPreviousElement() {
         return this.previous;
     }
 
