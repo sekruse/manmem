@@ -94,5 +94,43 @@ public class DiskOperatorTest {
         diskOperator.close();
     }
 
+    @Test
+    public void testRecycleDiskMemorySegment() throws Exception {
+        final int segmentSize = 8;
+        final File diskOperatorFile = File.createTempFile("manmem", "segments");
+        diskOperatorFile.deleteOnExit();
+
+        // Create a disk operator.
+        DiskOperator diskOperator = new DiskOperator(diskOperatorFile, segmentSize);
+
+        // Create a main memory segment with data.
+        byte[] testData1 = new byte[]{0, 1, 2, 3};
+        MainMemorySegment mainMemorySegment1 = createMainMemorySegment(8, testData1);
+        final DiskMemorySegment diskMemorySegment1 = diskOperator.write(mainMemorySegment1);
+        loadAndCompareMainMemorySegment(diskMemorySegment1, diskOperator, testData1, segmentSize);
+
+        byte[] testData2 = new byte[]{10, 10, 10, 10, -10, -10, -10, -10};
+        MainMemorySegment mainMemorySegment2 = createMainMemorySegment(8, testData2);
+        final DiskMemorySegment diskMemorySegment2 = diskOperator.write(mainMemorySegment2);
+        loadAndCompareMainMemorySegment(diskMemorySegment2, diskOperator, testData2, segmentSize);
+
+        // Give up the first disk memory segment.
+        diskMemorySegment1.free();
+
+        byte[] testData3 = new byte[]{1, 2, 3, 4};
+        MainMemorySegment mainMemorySegment3 = createMainMemorySegment(8, testData3);
+        final DiskMemorySegment diskMemorySegment3 = diskOperator.write(mainMemorySegment3);
+        loadAndCompareMainMemorySegment(diskMemorySegment3, diskOperator, testData3, segmentSize);
+
+        byte[] testData4 = new byte[]{55, 66, 123, -23, -42};
+        MainMemorySegment mainMemorySegment4 = createMainMemorySegment(8, testData4);
+        final DiskMemorySegment diskMemorySegment4 = diskOperator.write(mainMemorySegment4);
+        loadAndCompareMainMemorySegment(diskMemorySegment4, diskOperator, testData4, segmentSize);
+
+        diskOperator.close();
+
+        // The third segment should have reused the spot of the second segment.
+        Assert.assertEquals(diskMemorySegment1.getFileOffset(), diskMemorySegment3.getFileOffset());
+    }
 
 }
