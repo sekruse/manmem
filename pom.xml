@@ -4,11 +4,11 @@
 
     <groupId>com.github.sekruse</groupId>
     <artifactId>manmem</artifactId>
-    <version>0.1</version>
+    <version>0.2-SNAPSHOT</version>
 
     <scm>
         <developerConnection>scm:git:https://github.com/sekruse/manmem.git</developerConnection>
-      <tag>manmem-0.1</tag>
+      <tag>HEAD</tag>
   </scm>
 
     <dependencyManagement>
