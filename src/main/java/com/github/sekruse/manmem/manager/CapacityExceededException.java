@@ -4,7 +4,7 @@ package com.github.sekruse.manmem.manager;
  * This exception signals that a request for memory cannot be served by a {@link MemoryManager} without exceeding the
  * granted memory capacity.
  */
-public class CapacityExceededException extends RuntimeException {
+public class CapacityExceededException extends ManagedMemoryException {
 
     /**
      * @see RuntimeException#RuntimeException()

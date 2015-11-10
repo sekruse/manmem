@@ -77,18 +77,11 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
      * @param owner the {@link Memory} to assign this segment to
      */
     public void assignTo(Memory owner) {
-        // Sanity checks.
-        if (this.state != SegmentState.FREE) {
-            final String msg = String.format("Cannot assign segment to a new owner. Its state is %s.", this.state);
-            throw new IllegalStateException(msg);
-        }
-
         if (owner == null) {
             throw new NullPointerException();
         }
 
         this.owner = owner;
-        this.state = SegmentState.DIRTY;
         this.owner.setMainMemorySegment(this);
     }
 
@@ -113,5 +106,40 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
         }
 
         this.payloadLimit = buf.limit();
+    }
+
+    /**
+     * Brings this segment into its original state after instantiation.
+     */
+    public void reset() {
+        unlink();
+        this.owner = null;
+        this.payloadLimit = 0;
+        this.state = SegmentState.FREE;
+        // We do not eliminate the payload. In particular for efficiency.
+    }
+
+    public Memory getOwner() {
+        return owner;
+    }
+
+    /**
+     * Sanity-check the {@link #state} of this segment.
+     *
+     * @param state the assumed {@link SegmentState} of this segment
+     * @throws IllegalStateException if the actual and assumed state are distinct
+     */
+    public void shouldBeInState(SegmentState state) throws IllegalStateException {
+        if (this.state != state) {
+            throw new IllegalStateException(String.format("Segment should be %s but it is %s.", state, this.state));
+        }
+    }
+
+    public void setState(SegmentState state) {
+        this.state = state;
+    }
+
+    public SegmentState getState() {
+        return state;
     }
 }

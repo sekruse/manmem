@@ -52,6 +52,9 @@ public class DiskMemorySegment {
         this.size = size;
     }
 
+    /**
+     * Declare that this segment will no longer be used.
+     */
     public void free() {
         this.diskOperator.recycle(this);
     }
