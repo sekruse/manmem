@@ -264,4 +264,12 @@ public class GlobalMemoryManager implements MemoryManager {
         return mainMemorySegment;
     }
 
+    @Override
+    public void close() {
+        try {
+            this.diskOperator.close();
+        } catch (Exception e) {
+            LOGGER.error("Could not close the disk operator.", e);
+        }
+    }
 }

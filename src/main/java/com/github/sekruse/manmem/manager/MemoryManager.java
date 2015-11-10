@@ -15,4 +15,9 @@ public interface MemoryManager {
      */
     Memory requestDefaultMemory() throws CapacityExceededException;
 
+    /**
+     * Closes this memory manager and tells to release any used resources.
+     */
+    void close();
+
 }
