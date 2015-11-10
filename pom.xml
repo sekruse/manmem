@@ -7,6 +7,11 @@
     <groupId>com.github.sekruse</groupId>
     <artifactId>manmem</artifactId>
     <version>0.1-SNAPSHOT</version>
+
+    <scm>
+        <developerConnection>scm:git:https://github.com/sekruse/manmem.git</developerConnection>
+    </scm>
+
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -81,6 +86,11 @@
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>failsafe-maven-plugin</artifactId>
                 <version>2.4.3-alpha-1</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>2.5.3</version>
             </plugin>
         </plugins>
     </build>
