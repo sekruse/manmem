@@ -3,7 +3,7 @@ package com.github.sekruse.manmem.memory;
 import java.nio.ByteBuffer;
 
 /**
- * Common interface for any kind of access to {@link Memory}. The access is valid until the {@link #close()} method
+ * Common interface for any kind of access to {@link VirtualMemorySegment}. The access is valid until the {@link #close()} method
  * has been called. An open access might exclude other accesses.
  */
 public class MemoryAccess implements AutoCloseable {
@@ -14,19 +14,19 @@ public class MemoryAccess implements AutoCloseable {
     protected final ByteBuffer payload;
 
     /**
-     * The {@link Memory} that is accessed by this object.
+     * The {@link VirtualMemorySegment} that is accessed by this object.
      */
-    protected final Memory memory;
+    protected final VirtualMemorySegment virtualMemorySegment;
 
     /**
      * Creates a new access object for some memory.
-     * @param memory the {@link Memory} that should be accessed
+     * @param virtualMemorySegment the {@link VirtualMemorySegment} that should be accessed
      */
-    public MemoryAccess(Memory memory) {
-        this.memory = memory;
+    public MemoryAccess(VirtualMemorySegment virtualMemorySegment) {
+        this.virtualMemorySegment = virtualMemorySegment;
 
         // Remove the MainMemorySegment from its queue.
-        MainMemorySegment mainMemorySegment = this.memory.ensureMainMemorySegment();
+        MainMemorySegment mainMemorySegment = this.virtualMemorySegment.ensureMainMemorySegment();
         mainMemorySegment.unlink();
         this.payload = mainMemorySegment.asByteBuffer();
     }
@@ -44,7 +44,7 @@ public class MemoryAccess implements AutoCloseable {
         doClose();
 
         // Give the Memory back into control.
-        this.memory.enqueue();
+        this.virtualMemorySegment.enqueue();
     }
 
     /**

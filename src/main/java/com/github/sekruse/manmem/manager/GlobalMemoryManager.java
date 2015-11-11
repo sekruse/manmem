@@ -4,7 +4,7 @@ import com.github.sekruse.manmem.io.DiskOperator;
 import com.github.sekruse.manmem.manager.capabilities.MemoryCapabilities;
 import com.github.sekruse.manmem.memory.DiskMemorySegment;
 import com.github.sekruse.manmem.memory.MainMemorySegment;
-import com.github.sekruse.manmem.memory.Memory;
+import com.github.sekruse.manmem.memory.VirtualMemorySegment;
 import com.github.sekruse.manmem.memory.SegmentState;
 import com.github.sekruse.manmem.util.QueueableQueue;
 import org.slf4j.Logger;
@@ -57,20 +57,20 @@ public class GlobalMemoryManager implements MemoryManager {
     private final DiskOperator diskOperator;
 
     /**
-     * Capabilities that are granted to managed {@link Memory} objects.
+     * Capabilities that are granted to managed {@link VirtualMemorySegment} objects.
      */
     private final MemoryCapabilities memoryCapabilities = new MemoryCapabilities() {
         @Override
-        public void load(Memory memory) throws CapacityExceededException {
+        public void load(VirtualMemorySegment virtualMemorySegment) throws CapacityExceededException {
             // Do some sanity checks.
-            if (memory == null) {
+            if (virtualMemorySegment == null) {
                 throw new IllegalStateException();
             }
-            if (memory.getMainMemorySegment() != null) {
+            if (virtualMemorySegment.getMainMemorySegment() != null) {
                 LOGGER.warn("Requested to load a main memory segment that is already there.");
                 return;
             }
-            final DiskMemorySegment diskMemorySegment = memory.getDiskMemorySegment();
+            final DiskMemorySegment diskMemorySegment = virtualMemorySegment.getDiskMemorySegment();
             if (diskMemorySegment == null) {
                 throw new IllegalStateException();
             }
@@ -90,7 +90,7 @@ public class GlobalMemoryManager implements MemoryManager {
             }
 
             // Update the MainMemorySegment state and integrate it into the Memory.
-            freeSegment.assignTo(memory);
+            freeSegment.assignTo(virtualMemorySegment);
             freeSegment.setState(SegmentState.BACKED);
             enqueue(freeSegment);
         }
@@ -164,15 +164,15 @@ public class GlobalMemoryManager implements MemoryManager {
 
 
     @Override
-    public Memory requestDefaultMemory() throws CapacityExceededException {
+    public VirtualMemorySegment requestDefaultMemory() throws CapacityExceededException {
         // Get a free memory segment.
         MainMemorySegment mainMemorySegment = obtainFreeMainMemorySegment();
 
-        Memory memory = new Memory(this.memoryCapabilities);
+        VirtualMemorySegment virtualMemorySegment = new VirtualMemorySegment(this.memoryCapabilities);
         mainMemorySegment.setState(SegmentState.DIRTY);
         this.memoryCapabilities.enqueue(mainMemorySegment);
-        mainMemorySegment.assignTo(memory);
-        return memory;
+        mainMemorySegment.assignTo(virtualMemorySegment);
+        return virtualMemorySegment;
     }
 
     /**
@@ -229,7 +229,7 @@ public class GlobalMemoryManager implements MemoryManager {
         spillableSegment.shouldBeInState(SegmentState.DIRTY);
 
         // Revoke the memory from its owner.
-        final Memory owner = spillableSegment.getOwner();
+        final VirtualMemorySegment owner = spillableSegment.getOwner();
         if (owner.yieldMainMemory() != spillableSegment) {
             throw new RuntimeException("Relationship between main memory segment and owner seems to be broken.");
         }

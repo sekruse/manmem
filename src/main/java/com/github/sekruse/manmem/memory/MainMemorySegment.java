@@ -10,9 +10,9 @@ import java.nio.ByteBuffer;
 public class MainMemorySegment implements Queueable<MainMemorySegment> {
 
     /**
-     * If this segment is in use, it is attached to a {@link Memory} object.
+     * If this segment is in use, it is attached to a {@link VirtualMemorySegment} object.
      */
-    private Memory owner;
+    private VirtualMemorySegment owner;
 
     /**
      * {@link MainMemorySegment}s can be queued according to {@link Queueable}. These fields realize the link requirements
@@ -74,9 +74,9 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
     /**
      * Assigns this segment to a new owner.
      *
-     * @param owner the {@link Memory} to assign this segment to
+     * @param owner the {@link VirtualMemorySegment} to assign this segment to
      */
-    public void assignTo(Memory owner) {
+    public void assignTo(VirtualMemorySegment owner) {
         if (owner == null) {
             throw new NullPointerException();
         }
@@ -119,7 +119,7 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
         // We do not eliminate the payload. In particular for efficiency.
     }
 
-    public Memory getOwner() {
+    public VirtualMemorySegment getOwner() {
         return owner;
     }
 

@@ -1,6 +1,6 @@
 package com.github.sekruse.manmem.manager;
 
-import com.github.sekruse.manmem.memory.Memory;
+import com.github.sekruse.manmem.memory.VirtualMemorySegment;
 import com.github.sekruse.manmem.memory.ReadAccess;
 import com.github.sekruse.manmem.memory.WriteAccess;
 import jdk.nashorn.internal.ir.annotations.Ignore;
@@ -20,8 +20,8 @@ public class GlobalMemoryManagerTest {
         GlobalMemoryManager memoryManager = new GlobalMemoryManager(1024, 512);
 
         // Request some memory and release it.
-        Memory memory = memoryManager.requestDefaultMemory();
-        memory.release();
+        VirtualMemorySegment virtualMemorySegment = memoryManager.requestDefaultMemory();
+        virtualMemorySegment.release();
     }
 
     @Test
@@ -30,14 +30,14 @@ public class GlobalMemoryManagerTest {
         GlobalMemoryManager memoryManager = new GlobalMemoryManager(1024, 512);
 
         // Request some memory and release it.
-        Memory memory = memoryManager.requestDefaultMemory();
-        memory.release();
-        memory = memoryManager.requestDefaultMemory();
-        memory.release();
-        memory = memoryManager.requestDefaultMemory();
-        memory.release();
-        memory = memoryManager.requestDefaultMemory();
-        memory.release();
+        VirtualMemorySegment virtualMemorySegment = memoryManager.requestDefaultMemory();
+        virtualMemorySegment.release();
+        virtualMemorySegment = memoryManager.requestDefaultMemory();
+        virtualMemorySegment.release();
+        virtualMemorySegment = memoryManager.requestDefaultMemory();
+        virtualMemorySegment.release();
+        virtualMemorySegment = memoryManager.requestDefaultMemory();
+        virtualMemorySegment.release();
     }
 
     @Test
@@ -46,11 +46,11 @@ public class GlobalMemoryManagerTest {
         GlobalMemoryManager memoryManager = new GlobalMemoryManager(1024, 512);
 
         // Request some memory and lock it.
-        final Memory memory1 = memoryManager.requestDefaultMemory();
-        final ReadAccess readAccess1 = memory1.getReadAccess();
+        final VirtualMemorySegment virtualMemorySegment1 = memoryManager.requestDefaultMemory();
+        final ReadAccess readAccess1 = virtualMemorySegment1.getReadAccess();
 
-        final Memory memory2 = memoryManager.requestDefaultMemory();
-        final ReadAccess readAccess2 = memory2.getReadAccess();
+        final VirtualMemorySegment virtualMemorySegment2 = memoryManager.requestDefaultMemory();
+        final ReadAccess readAccess2 = virtualMemorySegment2.getReadAccess();
 
         boolean thirdRequestFailed = false;
         try {
@@ -68,11 +68,11 @@ public class GlobalMemoryManagerTest {
         GlobalMemoryManager memoryManager = new GlobalMemoryManager(1024, 512);
 
         // Request some memory and lock it.
-        final Memory memory1 = memoryManager.requestDefaultMemory();
-        final ReadAccess readAccess1 = memory1.getReadAccess();
+        final VirtualMemorySegment virtualMemorySegment1 = memoryManager.requestDefaultMemory();
+        final ReadAccess readAccess1 = virtualMemorySegment1.getReadAccess();
 
-        final Memory memory2 = memoryManager.requestDefaultMemory();
-        final WriteAccess writeAccess2 = memory2.getWriteAccess();
+        final VirtualMemorySegment virtualMemorySegment2 = memoryManager.requestDefaultMemory();
+        final WriteAccess writeAccess2 = virtualMemorySegment2.getWriteAccess();
 
         // Release the locks.
         readAccess1.close();
@@ -88,8 +88,8 @@ public class GlobalMemoryManagerTest {
         GlobalMemoryManager memoryManager = new GlobalMemoryManager(1024, 512);
 
         // Request some memory and write it.
-        final Memory memory1 = memoryManager.requestDefaultMemory();
-        try (WriteAccess writeAccess = memory1.getWriteAccess()) {
+        final VirtualMemorySegment virtualMemorySegment1 = memoryManager.requestDefaultMemory();
+        try (WriteAccess writeAccess = virtualMemorySegment1.getWriteAccess()) {
             final ByteBuffer buffer = writeAccess.getPayload();
             buffer.clear();
             buffer.put((byte) 1).flip();
@@ -98,8 +98,8 @@ public class GlobalMemoryManagerTest {
         }
 
         // Do it again.
-        final Memory memory2 = memoryManager.requestDefaultMemory();
-        try (WriteAccess writeAccess = memory2.getWriteAccess()) {
+        final VirtualMemorySegment virtualMemorySegment2 = memoryManager.requestDefaultMemory();
+        try (WriteAccess writeAccess = virtualMemorySegment2.getWriteAccess()) {
             final ByteBuffer buffer = writeAccess.getPayload();
             buffer.clear();
             buffer.put((byte) 2).flip();
@@ -108,17 +108,17 @@ public class GlobalMemoryManagerTest {
         }
 
         // Allocate a third memory segment.
-        final Memory memory3 = memoryManager.requestDefaultMemory();
+        final VirtualMemorySegment virtualMemorySegment3 = memoryManager.requestDefaultMemory();
 
         // The capacity is exceeded, check if the other two memories are nevertheless valid.
-        try (ReadAccess readAccess = memory1.getReadAccess()) {
+        try (ReadAccess readAccess = virtualMemorySegment1.getReadAccess()) {
             final ByteBuffer buffer = readAccess.getPayload();
             Assert.assertEquals(1, buffer.limit());
             Assert.assertEquals((byte) 1, buffer.get());
         } catch (Exception e) {
             throw new ManagedMemoryException(e);
         }
-        try (ReadAccess readAccess = memory2.getReadAccess()) {
+        try (ReadAccess readAccess = virtualMemorySegment2.getReadAccess()) {
             final ByteBuffer buffer = readAccess.getPayload();
             Assert.assertEquals(1, buffer.limit());
             Assert.assertEquals((byte) 2, buffer.get());

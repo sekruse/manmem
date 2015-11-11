@@ -7,7 +7,7 @@ import com.github.sekruse.manmem.manager.capabilities.MemoryCapabilities;
  * This class represents a piece of memory to clients. The physical location of the memory (RAM, disk) is not
  * determined.
  */
-public class Memory {
+public class VirtualMemorySegment {
 
     /**
      * The main memory segment that backs this memory. This segment may be {@code null} due to memory preemption.
@@ -30,7 +30,7 @@ public class Memory {
      * @param capabilities the capabilities needed to operate with a
      *                     {@link com.github.sekruse.manmem.manager.MemoryManager}.
      */
-    public Memory(MemoryCapabilities capabilities) {
+    public VirtualMemorySegment(MemoryCapabilities capabilities) {
         this.capabilities = capabilities;
     }
 
@@ -49,7 +49,7 @@ public class Memory {
      */
     public void setMainMemorySegment(MainMemorySegment mainMemorySegment) {
         if (this.mainMemorySegment != null) {
-            throw new IllegalStateException("Cannot set a new segment for the memory. It already has a segment.");
+            throw new IllegalStateException("Cannot set a new segment for the virtualMemorySegment. It already has a segment.");
         }
 
         this.mainMemorySegment = mainMemorySegment;

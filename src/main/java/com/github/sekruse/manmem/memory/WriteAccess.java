@@ -1,7 +1,7 @@
 package com.github.sekruse.manmem.memory;
 
 /**
- * This class encapsulate write access to {@link Memory}.
+ * This class encapsulate write access to {@link VirtualMemorySegment}.
  */
 public class WriteAccess extends MemoryAccess {
 
@@ -18,10 +18,10 @@ public class WriteAccess extends MemoryAccess {
     /**
      * Creates a new access object for some memory.
      *
-     * @param memory the memory to be written
+     * @param virtualMemorySegment the memory to be written
      */
-    public WriteAccess(Memory memory) {
-        super(memory);
+    public WriteAccess(VirtualMemorySegment virtualMemorySegment) {
+        super(virtualMemorySegment);
     }
 
     /**
@@ -38,7 +38,7 @@ public class WriteAccess extends MemoryAccess {
         super.doClose();
 
         if (this.isMemoryChanged) {
-            final MainMemorySegment mainMemorySegment = this.memory.getMainMemorySegment();
+            final MainMemorySegment mainMemorySegment = this.virtualMemorySegment.getMainMemorySegment();
             mainMemorySegment.update(this.payload);
             mainMemorySegment.setState(SegmentState.DIRTY);
         }

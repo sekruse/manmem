@@ -2,7 +2,7 @@ package com.github.sekruse.manmem.integrationtests;
 
 import com.github.sekruse.manmem.manager.GlobalMemoryManager;
 import com.github.sekruse.manmem.manager.MemoryManager;
-import com.github.sekruse.manmem.memory.Memory;
+import com.github.sekruse.manmem.memory.VirtualMemorySegment;
 import com.github.sekruse.manmem.memory.ReadAccess;
 import com.github.sekruse.manmem.memory.WriteAccess;
 import org.junit.Assert;
@@ -35,11 +35,11 @@ public class OutOfCoreMergeSortITCase {
         MemoryManager memoryManager = new GlobalMemoryManager(1 * MB, 32 * KB);
 
         // Load the original data into the managed memory.
-        List<Memory> memories = load(originalData, memoryManager);
+        List<VirtualMemorySegment> memories = load(originalData, memoryManager);
 
         // Sort all the chunks individually.
-        for (Memory memory : memories) {
-            sort(memory);
+        for (VirtualMemorySegment virtualMemorySegment : memories) {
+            sort(virtualMemorySegment);
         }
 
         // Recursively merge all the segments.
@@ -56,14 +56,14 @@ public class OutOfCoreMergeSortITCase {
      * Compares a given byte array with the content of a list of memory chunks for equality.
      *
      * @param byteArray a {@code byte[]}
-     * @param memories  a list of {@link Memory} objects
+     * @param memories  a list of {@link VirtualMemorySegment} objects
      */
-    private void compare(byte[] byteArray, List<Memory> memories) {
-        Iterator<Memory> memoryIterator = memories.iterator();
+    private void compare(byte[] byteArray, List<VirtualMemorySegment> memories) {
+        Iterator<VirtualMemorySegment> memoryIterator = memories.iterator();
         int originalDataPos = 0;
         while (originalDataPos < byteArray.length && memoryIterator.hasNext()) {
-            Memory currentMemory = memoryIterator.next();
-            try (ReadAccess readAccess = currentMemory.getReadAccess()) {
+            VirtualMemorySegment currentVms = memoryIterator.next();
+            try (ReadAccess readAccess = currentVms.getReadAccess()) {
                 while (readAccess.getPayload().hasRemaining()) {
                     Assert.assertTrue(originalDataPos < byteArray.length);
                     byte readByte = readAccess.getPayload().get();
@@ -84,13 +84,13 @@ public class OutOfCoreMergeSortITCase {
      * @param to            the first memory index after the second memory range
      * @param memoryManager manager of the memory
      */
-    private static void mergeSort(List<Memory> memories, int from, int to, MemoryManager memoryManager) {
+    private static void mergeSort(List<VirtualMemorySegment> memories, int from, int to, MemoryManager memoryManager) {
         // Subdivide the sorting range into two halves.
         int middle = (to - from) / 2 + from;
         if (middle - from > 1) mergeSort(memories, from, middle, memoryManager);
         if (to - middle > 1) mergeSort(memories, middle, to, memoryManager);
 
-        List<Memory> mergedChunks = new LinkedList<>();
+        List<VirtualMemorySegment> mergedChunks = new LinkedList<>();
         int firstMemoryIndex = from - 1, secondMemoryIndex = middle - 1;
         ReadAccess firstChunkReadAccess = null, secondChunkReadAccess = null;
         WriteAccess mergedChunkWriteAccess = null;
@@ -99,8 +99,8 @@ public class OutOfCoreMergeSortITCase {
             // Ensure the first chunk.
             if (firstChunkReadAccess == null) {
                 if (++firstMemoryIndex < middle) {
-                    final Memory memory = memories.get(firstMemoryIndex);
-                    firstChunkReadAccess = memory.getReadAccess();
+                    final VirtualMemorySegment virtualMemorySegment = memories.get(firstMemoryIndex);
+                    firstChunkReadAccess = virtualMemorySegment.getReadAccess();
                 } else {
                     break;
                 }
@@ -109,8 +109,8 @@ public class OutOfCoreMergeSortITCase {
             // Ensure the second chunk.
             if (secondChunkReadAccess == null) {
                 if (++secondMemoryIndex < to) {
-                    final Memory memory = memories.get(secondMemoryIndex);
-                    secondChunkReadAccess = memory.getReadAccess();
+                    final VirtualMemorySegment virtualMemorySegment = memories.get(secondMemoryIndex);
+                    secondChunkReadAccess = virtualMemorySegment.getReadAccess();
                 } else {
                     break;
                 }
@@ -158,8 +158,8 @@ public class OutOfCoreMergeSortITCase {
 
         // Replace the original chunks with the merged chunks.
         for (int i = 0; i < mergedChunks.size(); i++) {
-            final Memory originalMemory = memories.get(from + i);
-            originalMemory.release();
+            final VirtualMemorySegment originalVms = memories.get(from + i);
+            originalVms.release();
             memories.set(from + i, mergedChunks.get(i));
         }
     }
@@ -176,14 +176,14 @@ public class OutOfCoreMergeSortITCase {
      * @param memoryManager          allocates new target chunks if necessary
      */
     private static void copyRemainder(ReadAccess curChunkReadAccess, int curMemoryIndex, int maxMemoryIndex,
-                                      List<Memory> readMemories, WriteAccess mergedChunkWriteAccess,
-                                      List<Memory> mergedChunks, MemoryManager memoryManager) {
+                                      List<VirtualMemorySegment> readMemories, WriteAccess mergedChunkWriteAccess,
+                                      List<VirtualMemorySegment> mergedChunks, MemoryManager memoryManager) {
         while (true) {
             // Ensure the chunk.
             if (curChunkReadAccess == null) {
                 if (++curMemoryIndex < maxMemoryIndex) {
-                    final Memory memory = readMemories.get(curMemoryIndex);
-                    curChunkReadAccess = memory.getReadAccess();
+                    final VirtualMemorySegment virtualMemorySegment = readMemories.get(curMemoryIndex);
+                    curChunkReadAccess = virtualMemorySegment.getReadAccess();
                 } else {
                     break;
                 }
@@ -212,11 +212,11 @@ public class OutOfCoreMergeSortITCase {
      * @param memoryManager          allocates new target memory if {@code targetChunkWriteAccess} is {@code null}
      * @return the input target memory writer or {@code null} if that became full
      */
-    private static WriteAccess copyByte(ByteBuffer source, WriteAccess targetChunkWriteAccess, List<Memory> targetChunks, MemoryManager memoryManager) {
+    private static WriteAccess copyByte(ByteBuffer source, WriteAccess targetChunkWriteAccess, List<VirtualMemorySegment> targetChunks, MemoryManager memoryManager) {
         if (targetChunkWriteAccess == null) {
-            final Memory mergeMemory = memoryManager.requestDefaultMemory();
-            targetChunks.add(mergeMemory);
-            targetChunkWriteAccess = mergeMemory.getWriteAccess();
+            final VirtualMemorySegment mergeVms = memoryManager.requestDefaultMemory();
+            targetChunks.add(mergeVms);
+            targetChunkWriteAccess = mergeVms.getWriteAccess();
             targetChunkWriteAccess.getPayload().clear();
         }
         targetChunkWriteAccess.getPayload().put(source.get());
@@ -230,10 +230,10 @@ public class OutOfCoreMergeSortITCase {
     /**
      * Sorts the bytes within the given memory.
      *
-     * @param memory the memory to be sorted
+     * @param virtualMemorySegment the memory to be sorted
      */
-    private static void sort(Memory memory) {
-        try (WriteAccess writeAccess = memory.getWriteAccess()) {
+    private static void sort(VirtualMemorySegment virtualMemorySegment) {
+        try (WriteAccess writeAccess = virtualMemorySegment.getWriteAccess()) {
             final ByteBuffer payload = writeAccess.getPayload();
             if (!payload.hasArray()) {
                 throw new RuntimeException("Require array-backed buffers for sorting.");
@@ -249,15 +249,15 @@ public class OutOfCoreMergeSortITCase {
      * @param memoryManager the manager for the managed memory
      * @return a list of memory created chunks in order of the original data
      */
-    private static List<Memory> load(byte[] originalData, MemoryManager memoryManager) {
+    private static List<VirtualMemorySegment> load(byte[] originalData, MemoryManager memoryManager) {
         // Initialize lists for the memory chunks.
-        List<Memory> chunks = new LinkedList<>();
+        List<VirtualMemorySegment> chunks = new LinkedList<>();
 
         // Allocate and chunks and copy the data chunk wise.
         int originalDataPos = 0;
         while (originalDataPos < originalData.length) {
             // Allocate memory.
-            Memory currentChunk = memoryManager.requestDefaultMemory();
+            VirtualMemorySegment currentChunk = memoryManager.requestDefaultMemory();
             chunks.add(currentChunk);
 
             // Copy the data.
