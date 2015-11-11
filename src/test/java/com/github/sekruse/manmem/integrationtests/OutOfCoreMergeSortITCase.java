@@ -1,5 +1,6 @@
 package com.github.sekruse.manmem.integrationtests;
 
+import com.github.sekruse.manmem.manager.CapacityExceededException;
 import com.github.sekruse.manmem.manager.GlobalMemoryManager;
 import com.github.sekruse.manmem.manager.MemoryManager;
 import com.github.sekruse.manmem.memory.VirtualMemorySegment;
@@ -21,9 +22,37 @@ public class OutOfCoreMergeSortITCase {
     private static final int MB = 1024 * 1024;
 
     @Test
-    public void test() {
+    public void testMedium() {
         // Create 10 MB of random bytes.
-        byte[] originalData = new byte[10 * MB];
+        final int dataSize = 10 * MB;
+        final int managedMemory = 1 * MB;
+        final int segmentSize = 32 * KB;
+
+        runMergeSort(dataSize, managedMemory, segmentSize);
+    }
+
+    @Test
+    public void testTiny() {
+        // Create 10 MB of random bytes.
+        final int dataSize = 10;
+        final int managedMemory = 3; // Three buffers are the absolute minimum: two read buffers, one merge buffer
+        final int segmentSize = 1;
+
+        runMergeSort(dataSize, managedMemory, segmentSize);
+    }
+
+    @Test(expected = CapacityExceededException.class)
+    public void testTooTiny() {
+        // Create 10 MB of random bytes.
+        final int dataSize = 10;
+        final int managedMemory = 2; // Three buffers are the absolute minimum: two read buffers, one merge buffer
+        final int segmentSize = 1;
+
+        runMergeSort(dataSize, managedMemory, segmentSize);
+    }
+
+    public void runMergeSort(int dataSize, int managedMemory, int segmentSize) {
+        byte[] originalData = new byte[dataSize];
         Random random = new Random(42);
         random.nextBytes(originalData);
 
@@ -32,7 +61,7 @@ public class OutOfCoreMergeSortITCase {
         Arrays.sort(sortedData);
 
         // Create a GlobalMemoryManger with a main memory capacity of 1 MB.
-        MemoryManager memoryManager = new GlobalMemoryManager(1 * MB, 32 * KB);
+        MemoryManager memoryManager = new GlobalMemoryManager(managedMemory, segmentSize);
 
         // Load the original data into the managed memory.
         List<VirtualMemorySegment> memories = load(originalData, memoryManager);

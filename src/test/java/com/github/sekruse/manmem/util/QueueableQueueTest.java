@@ -14,7 +14,6 @@ public class QueueableQueueTest {
     @Test
     public void testInitialQueueIsEmpty() {
         final QueueableQueue<TestQueueable> queue = new QueueableQueue<>();
-        Assert.assertTrue(queue.isEmpty());
         Assert.assertNull(queue.poll());
         Assert.assertNull(queue.poll());
     }
@@ -30,7 +29,6 @@ public class QueueableQueueTest {
             final TestQueueable polled = queue.poll();
             Assert.assertSame(queueable, polled);
         }
-        Assert.assertTrue(queue.isEmpty());
         Assert.assertNull(queue.poll());
     }
 
@@ -42,6 +40,16 @@ public class QueueableQueueTest {
     private static class TestQueueable implements Queueable<TestQueueable> {
 
         private Queueable<TestQueueable> next, prev;
+
+        private QueueableQueue<TestQueueable> queue;
+
+        public TestQueueable() {
+            this(null);
+        }
+
+        public TestQueueable(QueueableQueue<TestQueueable> queue) {
+            setQueue(queue);
+        }
 
         @Override
         public void setPreviousElement(Queueable<TestQueueable> element) {
@@ -61,6 +69,16 @@ public class QueueableQueueTest {
         @Override
         public Queueable<TestQueueable> getPreviousElement() {
             return this.prev;
+        }
+
+        @Override
+        public QueueableQueue<TestQueueable> getQueue() {
+            return this.queue;
+        }
+
+        @Override
+        public void setQueue(QueueableQueue<TestQueueable> queue) {
+            this.queue = queue;
         }
     }
 }

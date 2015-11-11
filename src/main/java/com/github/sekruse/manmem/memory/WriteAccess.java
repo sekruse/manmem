@@ -10,11 +10,6 @@ public class WriteAccess extends MemoryAccess {
      */
     private boolean isMemoryChanged = true;
 
-    @Override
-    public void close() {
-        super.close();
-    }
-
     /**
      * Creates a new access object for some memory.
      *
@@ -30,17 +25,21 @@ public class WriteAccess extends MemoryAccess {
      * @param isMemoryChanged whether the data has changed
      */
     public void setMemoryChanged(boolean isMemoryChanged) {
+        ensureNotClosed();
         this.isMemoryChanged = isMemoryChanged;
     }
 
     @Override
-    protected void doClose() {
-        super.doClose();
+    public void close() {
+        super.close();
 
         if (this.isMemoryChanged) {
             final MainMemorySegment mainMemorySegment = this.virtualMemorySegment.getMainMemorySegment();
             mainMemorySegment.update(this.payload);
-            mainMemorySegment.setState(SegmentState.DIRTY);
+            mainMemorySegment.setState(SegmentState.DIRTY); // We might have to lock here. However, there is no
+            // concurrent action.
         }
+
+        this.virtualMemorySegment.notifyWriteAccessDone();
     }
 }

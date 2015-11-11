@@ -1,5 +1,8 @@
 package com.github.sekruse.manmem.util;
 
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
 /**
  * This class makes queues made up from {@link Queueable} objects explicit by providing a head and a tail pointer and
  * several access methods.
@@ -39,6 +42,15 @@ public class QueueableQueue<Element extends Queueable<Element>> {
             throw new RuntimeException("Cannot reveal a surrogate queue head.");
         }
 
+        @Override
+        public QueueableQueue<Element> getQueue() {
+            return QueueableQueue.this;
+        }
+
+        @Override
+        public void setQueue(QueueableQueue<Element> queue) {
+            throw new RuntimeException("Method not supported.");
+        }
     };
 
     /**
@@ -73,7 +85,20 @@ public class QueueableQueue<Element extends Queueable<Element>> {
         public Element reveal() {
             throw new RuntimeException("Cannot reveal a surrogate queue tail.");
         }
+
+        @Override
+        public QueueableQueue<Element> getQueue() {
+            return QueueableQueue.this;
+        }
+
+        @Override
+        public void setQueue(QueueableQueue<Element> queue) {
+            throw new RuntimeException("Method not supported.");
+        }
+
     };
+
+    private final ReentrantLock lock = new ReentrantLock();
 
     /**
      * Creates a new, empty queue.
@@ -84,21 +109,20 @@ public class QueueableQueue<Element extends Queueable<Element>> {
     }
 
     /**
-     * @return whether this queue is empty
-     */
-    public boolean isEmpty() {
-        return this.head.getNextElement() == this.tail;
-    }
-
-    /**
      * Adds an element to the tail of the queue.
      *
      * @param element the element to add
      */
     public void add(Queueable<Element> element) {
-        final Queueable<Element> secondToLastElement = this.tail.getPreviousElement();
-        secondToLastElement.linkWithNextElement(element);
-        element.linkWithNextElement(this.tail);
+        getLock().lock();
+        try {
+            final Queueable<Element> secondToLastElement = this.tail.getPreviousElement();
+            element.setQueue(this);
+            secondToLastElement.linkWithNextElement(element);
+            element.linkWithNextElement(this.tail);
+        } finally {
+            getLock().unlock();
+        }
     }
 
     /**
@@ -108,15 +132,28 @@ public class QueueableQueue<Element extends Queueable<Element>> {
      * @see Queueable#unlink()
      */
     public Element poll() {
-        if (this.isEmpty()) {
-            return null;
+        getLock().lock();
+        try {
+            final Queueable<Element> secondElement = this.head.getNextElement();
+            if (secondElement == this.tail) {
+                return null;
+            }
+            secondElement.notifyBeingPolled();
+            secondElement.unlink();
+            return secondElement.reveal();
+        } finally {
+            getLock().unlock();
         }
 
-        final Queueable<Element> secondElement = this.head.getNextElement();
-        this.head.linkWithNextElement(secondElement.getNextElement());
-        secondElement.unlink();
-
-        return secondElement.reveal();
     }
 
+    /**
+     * Access to the queue's {@link Lock}. It should only be held very shortly to add or remove elements from the
+     * queue.
+     *
+     * @return the {@link Lock} of this queue
+     */
+    public ReentrantLock getLock() {
+        return this.lock;
+    }
 }

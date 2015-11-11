@@ -2,12 +2,34 @@ package com.github.sekruse.manmem.memory;
 
 import com.github.sekruse.manmem.manager.CapacityExceededException;
 import com.github.sekruse.manmem.manager.capabilities.MemoryCapabilities;
+import com.github.sekruse.manmem.util.QueueableQueue;
+
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * This class represents a piece of memory to clients. The physical location of the memory (RAM, disk) is not
  * determined.
  */
 public class VirtualMemorySegment {
+    // TODO: employ lock
+
+    /**
+     * The number maximum concurrent reads.
+     * We do not actually need to restrict this number unless there are performance implications.
+     * @see #readSemaphore
+     */
+    private static final int MAX_CONCURRENT_READS = 1024;
+
+    /**
+     * {@link Semaphore} to regulate read and write accesses.
+     */
+    private Semaphore readSemaphore = new Semaphore(MAX_CONCURRENT_READS, false);
+
+    /**
+     * {@link java.util.concurrent.locks.Lock} to regulate write accesses.
+     */
+    private ReentrantLock writeLock = new ReentrantLock();
 
     /**
      * The main memory segment that backs this memory. This segment may be {@code null} due to memory preemption.
@@ -23,6 +45,11 @@ public class VirtualMemorySegment {
      * Some capabilities to operate with a {@link com.github.sekruse.manmem.manager.MemoryManager}.
      */
     private final MemoryCapabilities capabilities;
+
+    /**
+     * Use this {@link java.util.concurrent.locks.Lock} before modifying this object.
+     */
+    private ReentrantLock lock = new ReentrantLock();
 
     /**
      * Creates a new instance.
@@ -48,7 +75,7 @@ public class VirtualMemorySegment {
      * @param mainMemorySegment the backing {@link MainMemorySegment}
      */
     public void setMainMemorySegment(MainMemorySegment mainMemorySegment) {
-        if (this.mainMemorySegment != null) {
+        if (mainMemorySegment != null && getMainMemorySegment() != null) {
             throw new IllegalStateException("Cannot set a new segment for the virtualMemorySegment. It already has a segment.");
         }
 
@@ -85,12 +112,12 @@ public class VirtualMemorySegment {
      * @throws IllegalStateException if there is no {@link MainMemorySegment} to yield
      */
     public MainMemorySegment yieldMainMemory() {
-        if (this.mainMemorySegment == null) {
+        if (getMainMemorySegment() == null) {
             throw new IllegalStateException("Cannot yield main memory segment.");
         }
 
-        final MainMemorySegment mainMemorySegment = this.mainMemorySegment;
-        this.mainMemorySegment = null;
+        final MainMemorySegment mainMemorySegment = getMainMemorySegment();
+        setMainMemorySegment(null);
 
         return mainMemorySegment;
     }
@@ -104,32 +131,23 @@ public class VirtualMemorySegment {
      * @throws CapacityExceededException if the {@link MainMemorySegment} could not be retrieved due to lack of
      *                                   capacities
      */
-    public MainMemorySegment ensureMainMemorySegment() throws CapacityExceededException {
-        if (this.mainMemorySegment != null) {
-            return this.mainMemorySegment;
+    private MainMemorySegment ensureMainMemorySegment() throws CapacityExceededException {
+        dequeMainMemorySegment(true);
+
+        if (getMainMemorySegment() != null) {
+            return getMainMemorySegment();
         }
 
-        if (this.diskMemorySegment == null) {
+        if (getDiskMemorySegment() == null) {
             throw new IllegalStateException("Neither a main memory segment nor a disk segment given.");
         }
 
         this.capabilities.load(this);
-        if (this.mainMemorySegment == null) {
+        if (getMainMemorySegment() == null) {
             throw new IllegalStateException("Still no main memory segment present after loading.");
         }
 
-        return this.mainMemorySegment;
-    }
-
-    /**
-     * Enqueues the {@link #mainMemorySegment} of the object into a suitable queue in
-     * {@link com.github.sekruse.manmem.manager.MemoryManager}.
-     */
-    public void enqueue() {
-        if (this.mainMemorySegment == null) {
-            throw new IllegalStateException("Cannot enqueue main memory segment, because there is none.");
-        }
-        this.capabilities.enqueue(this.mainMemorySegment);
+        return getMainMemorySegment();
     }
 
     /**
@@ -139,11 +157,13 @@ public class VirtualMemorySegment {
      * @see {@link AutoCloseable#close()}
      */
     public ReadAccess getReadAccess() {
-        // Load the MainMemorySegment if necessary.
-        final MainMemorySegment mainMemorySegment = ensureMainMemorySegment();
+        // Acquire a read semaphore when there is no pending or active write request.
+        this.writeLock.lock();
+        this.readSemaphore.acquireUninterruptibly();
+        this.writeLock.unlock();
 
-        // Remove it from any queue so that it is not preempted.
-        mainMemorySegment.unlink();
+        // Load the MainMemorySegment if necessary.
+        ensureMainMemorySegment();
 
         // Wrap the memory segment in a read access.
         return new ReadAccess(this);
@@ -156,13 +176,93 @@ public class VirtualMemorySegment {
      * @see {@link AutoCloseable#close()}
      */
     public WriteAccess getWriteAccess() {
-        // Load the MainMemorySegment if necessary.
-        final MainMemorySegment mainMemorySegment = ensureMainMemorySegment();
+        // Mark the pending write request.
+        this.writeLock.lock();
 
-        // Remove it from any queue so that it is not preempted.
-        mainMemorySegment.unlink();
+        // Wait for all reads to finish.
+        this.readSemaphore.acquireUninterruptibly(MAX_CONCURRENT_READS);
+
+        // Load the MainMemorySegment if necessary.
+        ensureMainMemorySegment();
 
         // Wrap the memory segment in a read access.
         return new WriteAccess(this);
     }
+
+    /**
+     * Use this {@link java.util.concurrent.locks.Lock} before modifying this object.
+     *
+     * @return the {@link java.util.concurrent.locks.Lock}
+     */
+    public ReentrantLock getLock() {
+        return lock;
+    }
+
+    /**
+     * Dequeue the {@link #mainMemorySegment} if any. This inhibits other accesses to it.
+     *
+     * @param unlock whether to release the lock on this object afterwards
+     */
+    private void dequeMainMemorySegment(boolean unlock) {
+        while (true) {
+            // Loop until either there is no MainMemorySegment or we can lock it in its queue.
+            getLock().lock();
+            final MainMemorySegment mms = getMainMemorySegment();
+            if (mms != null && !mms.tryLockQueue()) {
+                getLock().unlock();
+                Thread.yield();
+                continue;
+            }
+
+            // Remove the MainMemorySegment from its queue.
+            if (mms != null && mms.getQueue() != null) {
+                final QueueableQueue<MainMemorySegment> queue = mms.getQueue();
+                if (queue != null) {
+                    mms.dequeue();
+                    queue.getLock().unlock();
+                }
+            }
+
+            if (unlock) {
+                getLock().unlock();
+            }
+
+            return;
+        }
+    }
+
+    /**
+     * If a {@link ReadAccess} has finished, it has to release its access.
+     */
+    public void notifyReadAccessDone() {
+        this.readSemaphore.release();
+        enqueueIfNotAccessed();
+    }
+
+    /**
+     * If a {@link WriteAccess} has finished, it has to release its access.
+     */
+    public void notifyWriteAccessDone() {
+        this.readSemaphore.release(MAX_CONCURRENT_READS);
+        this.writeLock.unlock();
+        enqueueIfNotAccessed();
+    }
+
+
+    /**
+     * Enqueues the {@link #mainMemorySegment} of the object into a suitable queue in
+     * {@link com.github.sekruse.manmem.manager.MemoryManager} if there is no pending access request to it..
+     */
+    private void enqueueIfNotAccessed() {
+        if (getMainMemorySegment() == null) {
+            throw new IllegalStateException("Cannot enqueue main memory segment, because there is none.");
+        }
+
+        getLock().lock();
+        if (this.readSemaphore.availablePermits() == MAX_CONCURRENT_READS && !this.writeLock.isLocked()) {
+            this.capabilities.enqueue(this.mainMemorySegment);
+        }
+        getLock().unlock();
+    }
+
 }

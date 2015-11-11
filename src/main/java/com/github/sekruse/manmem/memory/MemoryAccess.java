@@ -9,6 +9,11 @@ import java.nio.ByteBuffer;
 public class MemoryAccess implements AutoCloseable {
 
     /**
+     * Guardian to check, once the access has been closed.
+     */
+    private boolean isClosed = false;
+
+    /**
      * The payload memory that is being accessed.
      */
     protected final ByteBuffer payload;
@@ -24,32 +29,27 @@ public class MemoryAccess implements AutoCloseable {
      */
     public MemoryAccess(VirtualMemorySegment virtualMemorySegment) {
         this.virtualMemorySegment = virtualMemorySegment;
-
-        // Remove the MainMemorySegment from its queue.
-        MainMemorySegment mainMemorySegment = this.virtualMemorySegment.ensureMainMemorySegment();
-        mainMemorySegment.unlink();
-        this.payload = mainMemorySegment.asByteBuffer();
+        this.payload = virtualMemorySegment.getMainMemorySegment().asByteBuffer();
     }
 
     /**
      * @return the payload of the memory as {@link ByteBuffer} that is initially in read state
      */
     public ByteBuffer getPayload() {
+        ensureNotClosed();
         return this.payload;
+    }
+
+    protected void ensureNotClosed() {
+        if (this.isClosed) {
+            throw new IllegalStateException(String.format("%s is already closed.", getClass().getSimpleName()));
+        }
     }
 
     @Override
     public void close() {
-        // Let the concrete access implementation do any closing work.
-        doClose();
-
-        // Give the Memory back into control.
-        this.virtualMemorySegment.enqueue();
+        ensureNotClosed();
+        this.isClosed = true;
     }
 
-    /**
-     * This method is called from {@link #close()} and can be overwritten to perform closing tasks..
-     */
-    protected void doClose() {
-    }
 }

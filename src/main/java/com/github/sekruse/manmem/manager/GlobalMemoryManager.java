@@ -92,7 +92,6 @@ public class GlobalMemoryManager implements MemoryManager {
             // Update the MainMemorySegment state and integrate it into the Memory.
             freeSegment.assignTo(virtualMemorySegment);
             freeSegment.setState(SegmentState.BACKED);
-            enqueue(freeSegment);
         }
 
         @Override
@@ -184,6 +183,10 @@ public class GlobalMemoryManager implements MemoryManager {
         // 1. look for a free segment
         final MainMemorySegment recycledSegment = this.freeQueue.poll();
         if (recycledSegment != null) {
+            // Do some sanity checks.
+            if (recycledSegment.getState() != SegmentState.FREE || recycledSegment.getOwner() != null) {
+                throw new IllegalStateException("Recycled statement not correctly reset.");
+            }
             return recycledSegment;
         }
 
@@ -193,11 +196,12 @@ public class GlobalMemoryManager implements MemoryManager {
         }
 
         // 3. try to steal a backed memory segment
-        final MainMemorySegment backedMemorySegment = this.backedQueue.poll();
+        final MainMemorySegment backedMemorySegment = this.backedQueue.poll(); // NB: Polling locks the owner.
         if (backedMemorySegment != null) {
             if (backedMemorySegment.getOwner().yieldMainMemory() != backedMemorySegment) {
                 throw new IllegalStateException("The segment/owner relationship seems to be broken.");
             }
+            backedMemorySegment.getOwner().getLock().unlock();
             backedMemorySegment.reset();
             return backedMemorySegment;
         }
@@ -222,7 +226,7 @@ public class GlobalMemoryManager implements MemoryManager {
      */
     private MainMemorySegment backAndStealDefaultMainMemorySegment() throws IOException {
         // Find a spillable main memory segment.
-        final MainMemorySegment spillableSegment = spillQueue.poll();
+        final MainMemorySegment spillableSegment = spillQueue.poll(); // NB: Polling yields a lock on the owner.
         if (spillableSegment == null) {
             return null;
         }
@@ -243,6 +247,7 @@ public class GlobalMemoryManager implements MemoryManager {
             diskMemorySegment = this.diskOperator.write(spillableSegment);
             owner.setDiskMemorySegment(diskMemorySegment);
         }
+        owner.getLock().unlock();
 
         // Reset and deliver the main memory segment.
         spillableSegment.reset();

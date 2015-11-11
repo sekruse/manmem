@@ -14,4 +14,9 @@ public class ReadAccess extends MemoryAccess {
         super(virtualMemorySegment);
     }
 
+    @Override
+    public void close() {
+        super.close();
+        this.virtualMemorySegment.notifyReadAccessDone();
+    }
 }

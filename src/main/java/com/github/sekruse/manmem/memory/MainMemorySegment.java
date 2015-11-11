@@ -1,11 +1,13 @@
 package com.github.sekruse.manmem.memory;
 
 import com.github.sekruse.manmem.util.Queueable;
+import com.github.sekruse.manmem.util.QueueableQueue;
 
 import java.nio.ByteBuffer;
 
 /**
- * This class encapsulates an actual amount of main memory.
+ * This class encapsulates an actual amount of main memory. Notice the concurrent modification requirements imposed
+ * by {@link Queueable}.
  */
 public class MainMemorySegment implements Queueable<MainMemorySegment> {
 
@@ -19,6 +21,11 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
      * of that interface.
      */
     private Queueable<MainMemorySegment> previous, next;
+
+    /**
+     * The {@link QueueableQueue} that contains the segment or {@code null} if there is no such queue.
+     */
+    private QueueableQueue<MainMemorySegment> queue;
 
     /**
      * The current state of this segment.
@@ -62,6 +69,24 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
     @Override
     public Queueable<MainMemorySegment> getPreviousElement() {
         return this.previous;
+    }
+
+    @Override
+    public QueueableQueue<MainMemorySegment> getQueue() {
+        return this.queue;
+    }
+
+    @Override
+    public void setQueue(QueueableQueue<MainMemorySegment> queue) {
+        this.queue = queue;
+    }
+
+    @Override
+    public void notifyBeingPolled() {
+        // If there is an owner, we obtain a lock on it.
+        if (this.owner != null) {
+            this.owner.getLock().lock();
+        }
     }
 
     /**
@@ -141,5 +166,13 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
 
     public SegmentState getState() {
         return state;
+    }
+
+    /**
+     * Removes this element from its queue. Assumes that the queue lock is held.
+     */
+    public void dequeue() {
+        unlink();
+        setQueue(null);
     }
 }
