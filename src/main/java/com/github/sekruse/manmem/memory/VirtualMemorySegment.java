@@ -12,7 +12,6 @@ import java.util.concurrent.locks.ReentrantLock;
  * determined.
  */
 public class VirtualMemorySegment {
-    // TODO: employ lock
 
     /**
      * The number maximum concurrent reads.
@@ -47,9 +46,9 @@ public class VirtualMemorySegment {
     private final MemoryCapabilities capabilities;
 
     /**
-     * Use this {@link java.util.concurrent.locks.Lock} before modifying this object.
+     * Use this {@link java.util.concurrent.locks.Lock} to modify the {@link #mainMemorySegment}.
      */
-    private ReentrantLock lock = new ReentrantLock();
+    private ReentrantLock mmsLock = new ReentrantLock();
 
     /**
      * Creates a new instance.
@@ -190,12 +189,12 @@ public class VirtualMemorySegment {
     }
 
     /**
-     * Use this {@link java.util.concurrent.locks.Lock} before modifying this object.
+     * Use this {@link java.util.concurrent.locks.Lock} before modifying the {@link #mainMemorySegment}.
      *
      * @return the {@link java.util.concurrent.locks.Lock}
      */
-    public ReentrantLock getLock() {
-        return lock;
+    public ReentrantLock getMainMemorySegmentLock() {
+        return mmsLock;
     }
 
     /**
@@ -204,12 +203,13 @@ public class VirtualMemorySegment {
      * @param unlock whether to release the lock on this object afterwards
      */
     private void dequeMainMemorySegment(boolean unlock) {
+        final ReentrantLock mmsLock = getMainMemorySegmentLock();
         while (true) {
             // Loop until either there is no MainMemorySegment or we can lock it in its queue.
-            getLock().lock();
+            mmsLock.lock();
             final MainMemorySegment mms = getMainMemorySegment();
             if (mms != null && !mms.tryLockQueue()) {
-                getLock().unlock();
+                mmsLock.unlock();
                 Thread.yield();
                 continue;
             }
@@ -224,7 +224,7 @@ public class VirtualMemorySegment {
             }
 
             if (unlock) {
-                getLock().unlock();
+                mmsLock.unlock();
             }
 
             return;
@@ -258,11 +258,12 @@ public class VirtualMemorySegment {
             throw new IllegalStateException("Cannot enqueue main memory segment, because there is none.");
         }
 
-        getLock().lock();
+        final ReentrantLock mmsLock = getMainMemorySegmentLock();
+        mmsLock.lock();
         if (this.readSemaphore.availablePermits() == MAX_CONCURRENT_READS && !this.writeLock.isLocked()) {
             this.capabilities.enqueue(this.mainMemorySegment);
         }
-        getLock().unlock();
+        mmsLock.unlock();
     }
 
 }

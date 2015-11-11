@@ -8,6 +8,10 @@ import java.nio.ByteBuffer;
 /**
  * This class encapsulates an actual amount of main memory. Notice the concurrent modification requirements imposed
  * by {@link Queueable}.
+ * <p>NB: This class can be subject to two stakeholders, namely a {@link QueueableQueue} and a
+ * {@link VirtualMemorySegment}. Therefore, when an object of this class is polled via {@link QueueableQueue#poll()},
+ * it will acquires the related {@link VirtualMemorySegment#getMainMemorySegmentLock()} to avoid synchronization
+ * conflicts. This lock has to be released manually afterwards.</p>
  */
 public class MainMemorySegment implements Queueable<MainMemorySegment> {
 
@@ -85,7 +89,7 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
     public void notifyBeingPolled() {
         // If there is an owner, we obtain a lock on it.
         if (this.owner != null) {
-            this.owner.getLock().lock();
+            this.owner.getMainMemorySegmentLock().lock();
         }
     }
 

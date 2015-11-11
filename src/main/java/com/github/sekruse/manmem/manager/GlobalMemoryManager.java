@@ -201,7 +201,7 @@ public class GlobalMemoryManager implements MemoryManager {
             if (backedMemorySegment.getOwner().yieldMainMemory() != backedMemorySegment) {
                 throw new IllegalStateException("The segment/owner relationship seems to be broken.");
             }
-            backedMemorySegment.getOwner().getLock().unlock();
+            backedMemorySegment.getOwner().getMainMemorySegmentLock().unlock();
             backedMemorySegment.reset();
             return backedMemorySegment;
         }
@@ -247,7 +247,7 @@ public class GlobalMemoryManager implements MemoryManager {
             diskMemorySegment = this.diskOperator.write(spillableSegment);
             owner.setDiskMemorySegment(diskMemorySegment);
         }
-        owner.getLock().unlock();
+        owner.getMainMemorySegmentLock().unlock();
 
         // Reset and deliver the main memory segment.
         spillableSegment.reset();
