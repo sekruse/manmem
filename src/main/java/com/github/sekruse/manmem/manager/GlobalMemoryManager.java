@@ -277,4 +277,14 @@ public class GlobalMemoryManager implements MemoryManager {
             LOGGER.error("Could not close the disk operator.", e);
         }
     }
+
+    @Override
+    public int getDefaultSegmentSize() {
+        return this.defaultMemorySize;
+    }
+
+    @Override
+    public long getCapacity() {
+        return this.capacity;
+    }
 }

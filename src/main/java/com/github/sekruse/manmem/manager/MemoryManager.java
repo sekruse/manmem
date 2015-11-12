@@ -20,4 +20,14 @@ public interface MemoryManager {
      */
     void close();
 
+    /**
+     * @return the default size (in bytes) of {@link VirtualMemorySegment}s that can be acquired via
+     * {@link #requestDefaultMemory()}
+     */
+    int getDefaultSegmentSize();
+
+    /**
+     * @return the main memory capacity (in bytes) assigned to this {@link MemoryManager}
+     */
+    long getCapacity();
 }

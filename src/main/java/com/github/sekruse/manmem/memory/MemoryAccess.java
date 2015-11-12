@@ -6,7 +6,7 @@ import java.nio.ByteBuffer;
  * Common interface for any kind of access to {@link VirtualMemorySegment}. The access is valid until the {@link #close()} method
  * has been called. An open access might exclude other accesses.
  */
-public class MemoryAccess implements AutoCloseable {
+public abstract class MemoryAccess implements AutoCloseable {
 
     /**
      * Guardian to check, once the access has been closed.
@@ -50,6 +50,20 @@ public class MemoryAccess implements AutoCloseable {
     public void close() {
         ensureNotClosed();
         this.isClosed = true;
+    }
+
+
+    /**
+     * @return whether this {@link MemoryAccess} permits write operations
+     */
+    public abstract boolean permitsWrite();
+
+    /**
+     * @return whether this {@link MemoryAccess} permits read operations
+     */
+    public boolean permitsRead() {
+        // We assume this as the general case.
+        return true;
     }
 
 }

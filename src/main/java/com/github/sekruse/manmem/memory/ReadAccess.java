@@ -19,4 +19,9 @@ public class ReadAccess extends MemoryAccess {
         super.close();
         this.virtualMemorySegment.notifyReadAccessDone();
     }
+
+    @Override
+    public boolean permitsWrite() {
+        return false;
+    }
 }

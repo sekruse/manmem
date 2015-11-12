@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * This class is the interface to write and read memory segments from disk.
@@ -18,6 +19,18 @@ import java.nio.file.StandardOpenOption;
 public class DiskOperator implements AutoCloseable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DiskOperator.class);
+
+
+    /**
+     * Info variable. Keeps track on how often {@link MainMemorySegment}s are loaded.
+     */
+    public static final AtomicLong SEGMENT_LOADS = new AtomicLong();
+
+    /**
+     * Info variable. Keeps track on how often {@link MainMemorySegment}s are written.
+     */
+    public static final AtomicLong SEGMENT_WRITES = new AtomicLong();
+
 
     /**
      * The file were this operator writes to and reads from.
@@ -114,6 +127,9 @@ public class DiskOperator implements AutoCloseable {
 
         // Update the metadata of the disk segment.
         diskMemorySegment.setSize(payload.limit());
+
+        // Update the counter.
+        SEGMENT_WRITES.incrementAndGet();
     }
 
     /**
@@ -149,6 +165,9 @@ public class DiskOperator implements AutoCloseable {
 
         // Update the main memory segment.
         mainMemorySegment.update(payload);
+
+        // Update the counter.
+        SEGMENT_LOADS.incrementAndGet();
     }
 
     /**

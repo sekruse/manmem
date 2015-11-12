@@ -42,4 +42,9 @@ public class WriteAccess extends MemoryAccess {
 
         this.virtualMemorySegment.notifyWriteAccessDone();
     }
+
+    @Override
+    public boolean permitsWrite() {
+        return true;
+    }
 }

@@ -1,5 +1,6 @@
 package com.github.sekruse.manmem.integrationtests;
 
+import com.github.sekruse.manmem.TestUtils;
 import com.github.sekruse.manmem.manager.CapacityExceededException;
 import com.github.sekruse.manmem.manager.GlobalMemoryManager;
 import com.github.sekruse.manmem.manager.MemoryManager;
@@ -28,7 +29,9 @@ public class OutOfCoreMergeSortITCase {
         final int managedMemory = 1 * MB;
         final int segmentSize = 32 * KB;
 
+        TestUtils.resetIoStats();
         runMergeSort(dataSize, managedMemory, segmentSize);
+        TestUtils.logIoStats(this, "testMedium()");
     }
 
     @Test
@@ -38,8 +41,9 @@ public class OutOfCoreMergeSortITCase {
         final int managedMemory = 3; // Three buffers are the absolute minimum: two read buffers, one merge buffer
         final int segmentSize = 1;
 
+        TestUtils.resetIoStats();
         runMergeSort(dataSize, managedMemory, segmentSize);
-    }
+        TestUtils.logIoStats(this, "testMedium()");    }
 
     @Test(expected = CapacityExceededException.class)
     public void testTooTiny() {
