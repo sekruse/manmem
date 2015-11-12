@@ -5,7 +5,7 @@ Framework to provide managed memory in the JVM.
 
 ### Major
 * build single-threaded version with pre-emption [ok]
-* make framework threadsafe, let disk operators run asynchronously
+* make framework threadsafe [ok]
 * build utilties on top of managed memory, such as sorting and maps
 
 ### Minor
@@ -15,3 +15,4 @@ Framework to provide managed memory in the JVM.
 
 ### Optional
 * support memories chunks of different sizes
+* let disk operators run asynchronously (for background spilling of segments, async API, use of RAID)
