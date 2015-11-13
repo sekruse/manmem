@@ -9,7 +9,7 @@ import com.github.sekruse.manmem.memory.VirtualMemorySegment;
 public class IntArray extends AbstractIntTable {
 
     /**
-     * Creates a new instance.
+     * Creates a new instance. Note that it is not {@code 0}-initialized unlike {@code int[]}.
      *
      * @param size          size of the array
      * @param memoryManager {@link MemoryManager} that manages the memory that back this array
@@ -35,6 +35,15 @@ public class IntArray extends AbstractIntTable {
      */
     public int get(long pos) {
         return super.get(pos);
+    }
+
+    /**
+     * Sets the values at all positions to the specified {@code value}.
+     *
+     * @param value the value to set
+     */
+    public void setAll(int value) {
+        super.clear(value);
     }
 
 }

@@ -200,7 +200,7 @@ public class DiskOperator implements AutoCloseable {
         ensureResponsibility(diskMemorySegment);
         long remainder = diskMemorySegment.getFileOffset() % this.segmentSize;
         if (remainder != 0L) {
-            final String msg = String.format("The offset %d is not a multiple of the segment size %d.",
+            final String msg = String.format("The offset %d is not a multiple of the segment sizeInInts %d.",
                     diskMemorySegment.getFileOffset(), this.segmentSize);
             throw new IllegalStateException(msg);
         }

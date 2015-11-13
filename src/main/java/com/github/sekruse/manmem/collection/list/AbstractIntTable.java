@@ -16,32 +16,32 @@ public class AbstractIntTable implements Lockable {
     /**
      * The {@link MemoryManager} that provides memory.
      */
-    private final MemoryManager memoryManager;
+    protected final MemoryManager memoryManager;
 
     /**
      * An array of allocated {@link VirtualMemorySegment}s.
      */
-    private final VirtualMemorySegment[] virtualMemorySegments;
+    protected final VirtualMemorySegment[] virtualMemorySegments;
 
     /**
      * An array of currently held {@link MemoryAccess}es (or {@code null} if none is held).
      */
-    private final MemoryAccess[] memoryAccesses;
+    protected final MemoryAccess[] memoryAccesses;
 
     /**
      * @see MemoryManager#getDefaultSegmentSize()
      */
-    private final int defaultSegmentSize;
+    protected final int defaultSegmentSize;
 
     /**
      * The size of this array.
      */
-    private final long size;
+    protected final long sizeInInts;
 
     /**
      * Creates a new instance.
      *
-     * @param size          size of the array
+     * @param size          number of {@code int}s in the array
      * @param memoryManager {@link MemoryManager} that manages the memory that back this array
      */
     public AbstractIntTable(long size, MemoryManager memoryManager) {
@@ -70,7 +70,7 @@ public class AbstractIntTable implements Lockable {
         for (int i = 0; i < this.virtualMemorySegments.length; i++) {
             this.virtualMemorySegments[i] = this.memoryManager.requestDefaultMemory();
         }
-        this.size = size;
+        this.sizeInInts = size;
     }
 
     /**
@@ -163,8 +163,8 @@ public class AbstractIntTable implements Lockable {
      * @return the index of the element
      */
     protected int getSegmentIndex(long pos) {
-        if (pos >= this.size || pos < 0) {
-            final String msg = String.format("Illegal index: %d (must be between 0 and %d).", pos, this.size);
+        if (pos >= this.sizeInInts || pos < 0) {
+            final String msg = String.format("Illegal index: %d (must be between 0 and %d).", pos, this.sizeInInts);
             throw new IndexOutOfBoundsException(msg);
         }
         return (int) (pos / (this.defaultSegmentSize >>> 2)); // log2(Integer.BYTES)
@@ -206,6 +206,56 @@ public class AbstractIntTable implements Lockable {
             if (memoryAccess != null) {
                 memoryAccess.close();
                 this.memoryAccesses[i] = null;
+            }
+        }
+    }
+
+    /**
+     * Sets all fields in this table to a default value.
+     *
+     * @param defaultValue the default value to set
+     */
+    protected void clear(int defaultValue) {
+        long pos = 0L;
+
+        // Initialize 4 KB of the default value.
+        final byte[] clearMask = new byte[4 * 1024];
+        if (defaultValue != 0) {
+            final ByteBuffer byteBuffer = ByteBuffer.wrap(clearMask);
+            byteBuffer.clear();
+            while (byteBuffer.hasRemaining()) {
+                byteBuffer.putInt(defaultValue);
+            }
+            byteBuffer.flip();
+        }
+
+        // Iterate over the segments and clear them one by one using the clearMask.
+        for (int segmentIndex = 0; segmentIndex < this.virtualMemorySegments.length; segmentIndex++) {
+            // Get write access.
+            MemoryAccess memoryAccess = this.memoryAccesses[segmentIndex];
+            boolean isExistingAccess = memoryAccess != null;
+            if (isExistingAccess) {
+                if (!memoryAccess.permitsWrite()) {
+                    final String msg = String.format("Segment %d is being accessed but not for writing.", segmentIndex);
+                    throw new IllegalStateException(msg);
+                }
+            } else {
+                memoryAccess = this.virtualMemorySegments[segmentIndex].getWriteAccess();
+            }
+
+            // Clean the segment.
+            final ByteBuffer payload = memoryAccess.getPayload();
+            payload.clear();
+            payload.limit((int) Math.min(payload.capacity(), this.sizeInInts * Integer.BYTES - pos));
+            int bytesToPut;
+            while ((bytesToPut = Math.min(payload.remaining(), clearMask.length)) > 0) {
+                payload.put(clearMask, 0, bytesToPut);
+            }
+            pos += payload.limit();
+
+            // Close the write access.
+            if (!isExistingAccess) {
+                memoryAccess.close();
             }
         }
     }
