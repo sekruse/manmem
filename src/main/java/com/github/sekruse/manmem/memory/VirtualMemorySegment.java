@@ -47,7 +47,7 @@ public class VirtualMemorySegment {
     private final MemoryCapabilities capabilities;
 
     /**
-     * Use this {@link java.util.concurrent.locks.Lock} to modify the {@link #mainMemorySegment}.
+     * Use this {@link java.util.concurrent.locks.Lock} to deque the {@link #mainMemorySegment}.
      */
     private ReentrantLock mmsLock = new ReentrantLock();
 
@@ -66,8 +66,18 @@ public class VirtualMemorySegment {
      * will no longer be used.
      */
     public void release() {
-        dequeMainMemorySegment(true);
-        this.capabilities.returnMemory(this.mainMemorySegment, this.diskMemorySegment);
+        if (this.writeLock.tryLock()) {
+            if (this.readSemaphore.tryAcquire(MAX_CONCURRENT_READS)) {
+                dequeMainMemorySegment();
+                this.capabilities.returnMemory(this.mainMemorySegment, this.diskMemorySegment);
+                this.readSemaphore.release(MAX_CONCURRENT_READS);
+            } else {
+                this.writeLock.unlock();
+                throw new IllegalStateException("Segment is still being read-accessed.");
+            }
+        } else {
+            throw new IllegalStateException("Segment is being write-accessed.");
+        }
     }
 
     /**
@@ -133,7 +143,8 @@ public class VirtualMemorySegment {
      *                                   capacities
      */
     private MainMemorySegment ensureMainMemorySegment() throws CapacityExceededException {
-        dequeMainMemorySegment(true);
+        // Make sure that
+        dequeMainMemorySegment();
 
         if (getMainMemorySegment() != null) {
             return getMainMemorySegment();
@@ -191,7 +202,7 @@ public class VirtualMemorySegment {
     }
 
     /**
-     * Use this {@link java.util.concurrent.locks.Lock} before modifying the {@link #mainMemorySegment}.
+     * Use this {@link java.util.concurrent.locks.Lock} before modifying/accessing the {@link #mainMemorySegment}.
      *
      * @return the {@link java.util.concurrent.locks.Lock}
      */
@@ -202,10 +213,9 @@ public class VirtualMemorySegment {
     /**
      * Dequeue the {@link #mainMemorySegment} if any. This inhibits other accesses to it.
      *
-     * @param unlock whether to release the lock on this object afterwards
      * @return whether the {@link MainMemorySegment} was enqueued
      */
-    private boolean dequeMainMemorySegment(boolean unlock) {
+    private boolean dequeMainMemorySegment() {
         final ReentrantLock mmsLock = getMainMemorySegmentLock();
         boolean wasSegmentLinked = false;
         while (true) {
@@ -227,9 +237,7 @@ public class VirtualMemorySegment {
                 }
             }
 
-            if (unlock) {
-                mmsLock.unlock();
-            }
+            mmsLock.unlock();
 
             return wasSegmentLinked;
         }
@@ -263,18 +271,15 @@ public class VirtualMemorySegment {
         }
         getMainMemorySegment().shouldBeUnlinked();
 
-        // TODO: This is not thread-safe! Maybe use an AtomicBoolean to guard this.
-        if (isBeingAccessed()) {
+        if (this.writeLock.tryLock() && this.readSemaphore.tryAcquire(MAX_CONCURRENT_READS)) {
+            getMainMemorySegmentLock().lock();
             this.capabilities.enqueue(this.mainMemorySegment);
+            getMainMemorySegmentLock().unlock();
+            this.readSemaphore.release(MAX_CONCURRENT_READS);
         }
+        if (this.writeLock.isHeldByCurrentThread()) this.writeLock.unlock();
     }
 
-    /**
-     * @return whether this segment is currently read accessed or write accessed
-     */
-    private boolean isBeingAccessed() {
-        return this.readSemaphore.availablePermits() == MAX_CONCURRENT_READS && !this.writeLock.isLocked();
-    }
 
     /**
      * Backs the {@link MainMemorySegment} to disk.
@@ -283,14 +288,11 @@ public class VirtualMemorySegment {
         if (!this.writeLock.tryLock()) {
             throw new IllegalStateException("Cannot back segment that is currently being written.");
         }
-        boolean wasMainMemorySegmentEnqueued = dequeMainMemorySegment(false);
-        if (this.mainMemorySegment != null) {
+        dequeMainMemorySegment();
+        if (getMainMemorySegment() != null) {
             this.capabilities.back(this);
         }
-        if (wasMainMemorySegmentEnqueued) {
-            this.capabilities.enqueue(this.mainMemorySegment);
-        }
         this.writeLock.unlock();
-        getMainMemorySegmentLock().unlock();
+        enqueueIfNotAccessed();
     }
 }
