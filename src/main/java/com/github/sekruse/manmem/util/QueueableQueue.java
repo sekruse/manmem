@@ -140,6 +140,7 @@ public class QueueableQueue<Element extends Queueable<Element>> {
             }
             secondElement.notifyBeingPolled();
             secondElement.unlink();
+            secondElement.setQueue(null);
             return secondElement.reveal();
         } finally {
             getLock().unlock();

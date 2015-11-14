@@ -30,4 +30,18 @@ public interface MemoryManager {
      * @return the main memory capacity (in bytes) assigned to this {@link MemoryManager}
      */
     long getCapacity();
+
+    /**
+     * @return the main memory capacity (in bytes) used by this {@link MemoryManager}
+     */
+    long getUsedCapacity();
+
+    /**
+     * Change the capacity of managed main memory.
+     *
+     * @param capacity the new capacity in bytes
+     * @throws CapacityExceededException if the capacity is lowered and the current state of managed memory does not
+     *                                   fit the new capacity
+     */
+    void resize(long capacity) throws CapacityExceededException;
 }

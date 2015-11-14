@@ -4,8 +4,8 @@ import com.github.sekruse.manmem.io.DiskOperator;
 import com.github.sekruse.manmem.manager.capabilities.MemoryCapabilities;
 import com.github.sekruse.manmem.memory.DiskMemorySegment;
 import com.github.sekruse.manmem.memory.MainMemorySegment;
-import com.github.sekruse.manmem.memory.VirtualMemorySegment;
 import com.github.sekruse.manmem.memory.SegmentState;
+import com.github.sekruse.manmem.memory.VirtualMemorySegment;
 import com.github.sekruse.manmem.util.QueueableQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -108,8 +108,7 @@ public class GlobalMemoryManager implements MemoryManager {
 
         @Override
         public void enqueue(MainMemorySegment mainMemorySegment) {
-            // Make sure that the segment is not in a queue anymore.
-            mainMemorySegment.unlink();
+            mainMemorySegment.shouldBeUnlinked();
 
             // Determine an appropriate queue.
             switch (mainMemorySegment.getState()) {
@@ -124,6 +123,20 @@ public class GlobalMemoryManager implements MemoryManager {
                     break;
                 default:
                     throw new IllegalStateException("Unknown/unhandled segment state: " + mainMemorySegment.getState());
+            }
+        }
+
+        @Override
+        public void back(VirtualMemorySegment virtualMemorySegment) {
+            final MainMemorySegment mms = virtualMemorySegment.getMainMemorySegment();
+            if (mms == null || mms.getState() != SegmentState.DIRTY) {
+                return;
+            }
+
+            try {
+                spill(mms);
+            } catch (IOException e) {
+                throw new ManagedMemoryException(e);
             }
         }
     };
@@ -167,9 +180,10 @@ public class GlobalMemoryManager implements MemoryManager {
         // Get a free memory segment.
         MainMemorySegment mainMemorySegment = obtainFreeMainMemorySegment();
 
-        VirtualMemorySegment virtualMemorySegment = new VirtualMemorySegment(this.memoryCapabilities);
+        // Wrap it and set it up.
         mainMemorySegment.setState(SegmentState.DIRTY);
         this.memoryCapabilities.enqueue(mainMemorySegment);
+        VirtualMemorySegment virtualMemorySegment = new VirtualMemorySegment(this.memoryCapabilities);
         mainMemorySegment.assignTo(virtualMemorySegment);
         return virtualMemorySegment;
     }
@@ -181,34 +195,26 @@ public class GlobalMemoryManager implements MemoryManager {
      */
     private MainMemorySegment obtainFreeMainMemorySegment() throws CapacityExceededException {
         // 1. look for a free segment
-        final MainMemorySegment recycledSegment = this.freeQueue.poll();
+        final MainMemorySegment recycledSegment = drawFreeSegment();
         if (recycledSegment != null) {
-            // Do some sanity checks.
-            if (recycledSegment.getState() != SegmentState.FREE || recycledSegment.getOwner() != null) {
-                throw new IllegalStateException("Recycled statement not correctly reset.");
-            }
             return recycledSegment;
         }
 
         // 2. if possible, create a new segment
-        if (this.capacityUsage + this.defaultMemorySize <= this.capacity) {
-            return createNewDefaultMainMemorySegment();
+        final MainMemorySegment newMainMemorySegment = tryToCreateNewDefaultMainMemorySegment();
+        if (newMainMemorySegment != null) {
+            return newMainMemorySegment;
         }
 
         // 3. try to steal a backed memory segment
-        final MainMemorySegment backedMemorySegment = this.backedQueue.poll(); // NB: Polling locks the owner.
+        final MainMemorySegment backedMemorySegment = drawBackedSegment();
         if (backedMemorySegment != null) {
-            if (backedMemorySegment.getOwner().yieldMainMemory() != backedMemorySegment) {
-                throw new IllegalStateException("The segment/owner relationship seems to be broken.");
-            }
-            backedMemorySegment.getOwner().getMainMemorySegmentLock().unlock();
-            backedMemorySegment.reset();
             return backedMemorySegment;
         }
 
         // 4. try to back a memory segment, then steal it
         try {
-            final MainMemorySegment stolenSegment = backAndStealDefaultMainMemorySegment();
+            final MainMemorySegment stolenSegment = drawDirtySegment();
             if (stolenSegment != null) {
                 return stolenSegment;
             }
@@ -220,22 +226,85 @@ public class GlobalMemoryManager implements MemoryManager {
     }
 
     /**
-     * Try to spill a segment from the {@link #spillQueue} so that it can stolen. Then steal it directly.
+     * Draw a {@link MainMemorySegment} from the {@link #freeQueue}.
+     *
+     * @return the drawn {@link MainMemorySegment} or {@code null} if none was available
+     */
+    private MainMemorySegment drawFreeSegment() {
+        final MainMemorySegment freeSegment = this.freeQueue.poll();
+        if (freeSegment != null) {
+            freeSegment.shouldBeInState(SegmentState.FREE);
+            if (freeSegment.getOwner() != null) {
+                throw new IllegalStateException();
+            }
+        }
+        return freeSegment;
+    }
+
+    /**
+     * Draws a {@link MainMemorySegment} from the {@link #backedQueue} and resets it.
+     *
+     * @return the drawn {@link MainMemorySegment} or {@code null} if none was available
+     */
+    private MainMemorySegment drawBackedSegment() {
+        final MainMemorySegment backedMemorySegment = this.backedQueue.poll(); // NB: Polling locks the owner.
+        if (backedMemorySegment != null) {
+            backedMemorySegment.shouldBeInState(SegmentState.BACKED);
+            if (backedMemorySegment.getOwner().yieldMainMemory() != backedMemorySegment) {
+                throw new IllegalStateException("The segment/owner relationship seems to be broken.");
+            }
+            backedMemorySegment.getOwner().getMainMemorySegmentLock().unlock();
+            backedMemorySegment.reset();
+        }
+        return backedMemorySegment;
+    }
+
+    /**
+     * Try to spill a segment from the {@link #spillQueue} so that it can be revoked. Then revoke it directly.
      *
      * @return the stolen free {@link MainMemorySegment} or {@code null} if none could be stolen
      */
-    private MainMemorySegment backAndStealDefaultMainMemorySegment() throws IOException {
+    private MainMemorySegment drawDirtySegment() throws IOException {
         // Find a spillable main memory segment.
         final MainMemorySegment spillableSegment = spillQueue.poll(); // NB: Polling yields a lock on the owner.
         if (spillableSegment == null) {
             return null;
         }
         spillableSegment.shouldBeInState(SegmentState.DIRTY);
+        spillAndRevoke(spillableSegment);
 
-        // Revoke the memory from its owner.
+        // Reset and deliver the main memory segment.
+        spillableSegment.reset();
+        return spillableSegment;
+    }
+
+    /**
+     * Spill a given {@link MainMemorySegment} to disk. This method assumes that the calling thread holds the
+     * associated {@link VirtualMemorySegment#getMainMemorySegmentLock()} and releases it afterwards. Also, it
+     * sets up the {@link VirtualMemorySegment#setDiskMemorySegment(DiskMemorySegment)} properly.
+     *
+     * @param spillableSegment the segment to spill
+     * @throws IOException
+     */
+    private void spillAndRevoke(MainMemorySegment spillableSegment) throws IOException {
+        spill(spillableSegment);
+        VirtualMemorySegment owner = revoke(spillableSegment);
+        owner.getMainMemorySegmentLock().unlock();
+    }
+
+    /**
+     * Spill a given {@link MainMemorySegment} to disk. This method assumes that the calling thread holds the
+     * associated {@link VirtualMemorySegment#getMainMemorySegmentLock()}. Also, it
+     * sets up the {@link VirtualMemorySegment#setDiskMemorySegment(DiskMemorySegment)} properly.
+     *
+     * @param spillableSegment the segment to spill
+     * @throws IOException
+     */
+    private void spill(MainMemorySegment spillableSegment) throws IOException {
+        // Find the owner.
         final VirtualMemorySegment owner = spillableSegment.getOwner();
-        if (owner.yieldMainMemory() != spillableSegment) {
-            throw new RuntimeException("Relationship between main memory segment and owner seems to be broken.");
+        if (owner == null) {
+            throw new IllegalStateException();
         }
 
         // Determine whether there already is a disk memory segment for this main memory segment.
@@ -247,21 +316,34 @@ public class GlobalMemoryManager implements MemoryManager {
             diskMemorySegment = this.diskOperator.write(spillableSegment);
             owner.setDiskMemorySegment(diskMemorySegment);
         }
-        owner.getMainMemorySegmentLock().unlock();
+        spillableSegment.setState(SegmentState.BACKED);
+    }
 
-        // Reset and deliver the main memory segment.
-        spillableSegment.reset();
-        return spillableSegment;
+    /**
+     * Revokes a {@link MainMemorySegment} from its {@link VirtualMemorySegment}. This method assumes that the calling thread holds the
+     * associated {@link VirtualMemorySegment#getMainMemorySegmentLock()}.
+     *
+     * @param mms the segment to spill
+     * @throws IOException
+     * @return the former {@link MainMemorySegment#getOwner()}
+     */
+    private VirtualMemorySegment revoke(MainMemorySegment mms) throws IOException {
+        // Revoke the memory from its owner.
+        final VirtualMemorySegment owner = mms.getOwner();
+        if (owner.yieldMainMemory() != mms) {
+            throw new RuntimeException("Relationship between main memory segment and owner seems to be broken.");
+        }
+        return owner;
     }
 
     /**
      * Creates a new default {@link MainMemorySegment}.
      *
-     * @return the created instance
+     * @return the created instance or {@code null} if there are no remaining capacities
      */
-    private MainMemorySegment createNewDefaultMainMemorySegment() {
+    synchronized private MainMemorySegment tryToCreateNewDefaultMainMemorySegment() {
         if (this.capacityUsage + this.defaultMemorySize > this.capacity) {
-            throw new CapacityExceededException("Capacity does not allow to create a new memory segment.");
+            return null;
         }
 
         MainMemorySegment mainMemorySegment = new MainMemorySegment(this.defaultMemorySize);
@@ -286,5 +368,52 @@ public class GlobalMemoryManager implements MemoryManager {
     @Override
     public long getCapacity() {
         return this.capacity;
+    }
+
+    @Override
+    public long getUsedCapacity() {
+        return this.capacityUsage;
+    }
+
+    @Override
+    synchronized public void resize(long newCapacity) throws CapacityExceededException {
+        if (newCapacity < 0) {
+            throw new IllegalArgumentException();
+        }
+        this.capacity = newCapacity;
+
+        // If we need to shrink the main memory usage, go to the free segments at first.
+        while (this.capacityUsage > this.capacity) {
+            // Try to get a backed segment.
+            final MainMemorySegment freeSegment = drawFreeSegment();
+            if (freeSegment == null) break;
+            this.capacityUsage -= freeSegment.capacity();
+        }
+
+        // Next, go to the backed segments.
+        while (this.capacityUsage > this.capacity) {
+            // Try to get a backed segment.
+            final MainMemorySegment backedSegment = drawBackedSegment();
+            if (backedSegment == null) break;
+            this.capacityUsage -= backedSegment.capacity();
+        }
+
+        // When the eviction of free and backed segments was not sufficient, spill dirty segments and steal them.
+        while (this.capacityUsage > this.capacity) {
+            // Try to get a backed segment.
+            final MainMemorySegment dirtySegment;
+            try {
+                dirtySegment = drawDirtySegment();
+            } catch (IOException e) {
+                throw new ManagedMemoryException("Could not spill dirty segment when resizing the managed memory.", e);
+            }
+            if (dirtySegment == null) break;
+            this.capacityUsage -= dirtySegment.capacity();
+        }
+
+        if (this.capacityUsage > this.capacity) {
+            this.capacity = this.capacityUsage;
+            throw new CapacityExceededException("Could not resize the capacity as requested.");
+        }
     }
 }

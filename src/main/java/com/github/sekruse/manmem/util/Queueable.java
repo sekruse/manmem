@@ -51,8 +51,10 @@ public interface Queueable<Self extends Queueable<Self>> {
 
     /**
      * Dequeues this element queuing up the next and previous elements and removing the links from this element.
+     *
+     * @return whether this element has been linked to other elements
      */
-    default void unlink() {
+    default boolean unlink() {
         final Queueable<Self> nextElement = this.getNextElement();
         final Queueable<Self> prevElement = this.getPreviousElement();
         if (nextElement != null) {
@@ -63,6 +65,7 @@ public interface Queueable<Self extends Queueable<Self>> {
         }
         this.setNextElement(null);
         this.setPreviousElement(null);
+        return nextElement != null || prevElement != null;
     }
 
     /**
@@ -108,6 +111,7 @@ public interface Queueable<Self extends Queueable<Self>> {
      * {@link QueueableQueue} calls this method to notify {@link Queueable} that they are about to be polled. Override
      * this method for clean-up. The {@link QueueableQueue#getLock()} should be held by the thread.
      */
-    default void notifyBeingPolled() { }
+    default void notifyBeingPolled() {
+    }
 
 }

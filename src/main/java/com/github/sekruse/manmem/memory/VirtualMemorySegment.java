@@ -16,6 +16,7 @@ public class VirtualMemorySegment {
     /**
      * The number maximum concurrent reads.
      * We do not actually need to restrict this number unless there are performance implications.
+     *
      * @see #readSemaphore
      */
     private static final int MAX_CONCURRENT_READS = 1024;
@@ -65,6 +66,7 @@ public class VirtualMemorySegment {
      * will no longer be used.
      */
     public void release() {
+        dequeMainMemorySegment(true);
         this.capabilities.returnMemory(this.mainMemorySegment, this.diskMemorySegment);
     }
 
@@ -201,9 +203,11 @@ public class VirtualMemorySegment {
      * Dequeue the {@link #mainMemorySegment} if any. This inhibits other accesses to it.
      *
      * @param unlock whether to release the lock on this object afterwards
+     * @return whether the {@link MainMemorySegment} was enqueued
      */
-    private void dequeMainMemorySegment(boolean unlock) {
+    private boolean dequeMainMemorySegment(boolean unlock) {
         final ReentrantLock mmsLock = getMainMemorySegmentLock();
+        boolean wasSegmentLinked = false;
         while (true) {
             // Loop until either there is no MainMemorySegment or we can lock it in its queue.
             mmsLock.lock();
@@ -218,7 +222,7 @@ public class VirtualMemorySegment {
             if (mms != null && mms.getQueue() != null) {
                 final QueueableQueue<MainMemorySegment> queue = mms.getQueue();
                 if (queue != null) {
-                    mms.dequeue();
+                    wasSegmentLinked = mms.dequeue();
                     queue.getLock().unlock();
                 }
             }
@@ -227,7 +231,7 @@ public class VirtualMemorySegment {
                 mmsLock.unlock();
             }
 
-            return;
+            return wasSegmentLinked;
         }
     }
 
@@ -251,19 +255,42 @@ public class VirtualMemorySegment {
 
     /**
      * Enqueues the {@link #mainMemorySegment} of the object into a suitable queue in
-     * {@link com.github.sekruse.manmem.manager.MemoryManager} if there is no pending access request to it..
+     * {@link com.github.sekruse.manmem.manager.MemoryManager} if there is no pending access request to it.
      */
     private void enqueueIfNotAccessed() {
         if (getMainMemorySegment() == null) {
             throw new IllegalStateException("Cannot enqueue main memory segment, because there is none.");
         }
+        getMainMemorySegment().shouldBeUnlinked();
 
-        final ReentrantLock mmsLock = getMainMemorySegmentLock();
-        mmsLock.lock();
-        if (this.readSemaphore.availablePermits() == MAX_CONCURRENT_READS && !this.writeLock.isLocked()) {
+        // TODO: This is not thread-safe! Maybe use an AtomicBoolean to guard this.
+        if (isBeingAccessed()) {
             this.capabilities.enqueue(this.mainMemorySegment);
         }
-        mmsLock.unlock();
     }
 
+    /**
+     * @return whether this segment is currently read accessed or write accessed
+     */
+    private boolean isBeingAccessed() {
+        return this.readSemaphore.availablePermits() == MAX_CONCURRENT_READS && !this.writeLock.isLocked();
+    }
+
+    /**
+     * Backs the {@link MainMemorySegment} to disk.
+     */
+    public void back() {
+        if (!this.writeLock.tryLock()) {
+            throw new IllegalStateException("Cannot back segment that is currently being written.");
+        }
+        boolean wasMainMemorySegmentEnqueued = dequeMainMemorySegment(false);
+        if (this.mainMemorySegment != null) {
+            this.capabilities.back(this);
+        }
+        if (wasMainMemorySegmentEnqueued) {
+            this.capabilities.enqueue(this.mainMemorySegment);
+        }
+        this.writeLock.unlock();
+        getMainMemorySegmentLock().unlock();
+    }
 }

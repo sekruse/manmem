@@ -34,4 +34,11 @@ public interface MemoryCapabilities {
      */
     void enqueue(MainMemorySegment mainMemorySegment);
 
+    /**
+     * Writes the {@link MainMemorySegment} of the given {@link VirtualMemorySegment}. Assumes that the
+     * {@link VirtualMemorySegment#getMainMemorySegmentLock()} is held.
+     *
+     * @param virtualMemorySegment the {@link VirtualMemorySegment} to back
+     */
+    void back(VirtualMemorySegment virtualMemorySegment);
 }

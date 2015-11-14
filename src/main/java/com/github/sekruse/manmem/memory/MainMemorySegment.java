@@ -141,11 +141,20 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
      * Brings this segment into its original state after instantiation.
      */
     public void reset() {
-        unlink();
+        shouldBeUnlinked();
         this.owner = null;
         this.payloadLimit = 0;
         this.state = SegmentState.FREE;
         // We do not eliminate the payload. In particular for efficiency.
+    }
+
+    /**
+     * @throws IllegalStateException if this {@link Queueable} is linked
+     */
+    public void shouldBeUnlinked() {
+        if (this.next != null || this.previous != null) {
+            throw new IllegalStateException("Segment is not unlinked.");
+        }
     }
 
     public VirtualMemorySegment getOwner() {
@@ -174,9 +183,20 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
 
     /**
      * Removes this element from its queue. Assumes that the queue lock is held.
+     *
+     * @return whether this element was linked to other elements
      */
-    public void dequeue() {
-        unlink();
-        setQueue(null);
+    public boolean dequeue() {
+        final boolean wasLinked = unlink();
+        if (!wasLinked && getQueue() != null) {
+            throw new IllegalStateException("Segment was in a queue but not linked.");
+        } else {
+            setQueue(null);
+        }
+        return wasLinked;
+    }
+
+    public long getSize() {
+        return this.payloadLimit;
     }
 }

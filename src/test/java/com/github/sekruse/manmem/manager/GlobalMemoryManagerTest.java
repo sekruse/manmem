@@ -145,4 +145,38 @@ public class GlobalMemoryManagerTest {
         // TODO
     }
 
+    @Test
+    public void testResizingWhenPossible() {
+        MemoryManager memoryManager = new GlobalMemoryManager(3 * 32, 32);
+        final VirtualMemorySegment vms1 = memoryManager.requestDefaultMemory();
+        final VirtualMemorySegment vms2 = memoryManager.requestDefaultMemory();
+        final VirtualMemorySegment vms3 = memoryManager.requestDefaultMemory();
+        vms1.getWriteAccess().close();
+        vms2.back();
+        vms3.release();
+
+        memoryManager.resize(0);
+        memoryManager.resize(32);
+
+        vms1.getWriteAccess().close();
+        vms2.getWriteAccess().close();
+        vms3.getWriteAccess().close();
+
+        memoryManager.close();
+    }
+
+    @Test(expected = CapacityExceededException.class)
+    public void testResizingFailsWhenNotPossible() {
+        MemoryManager memoryManager = new GlobalMemoryManager(3 * 32, 32);
+        final VirtualMemorySegment vms1 = memoryManager.requestDefaultMemory();
+        final VirtualMemorySegment vms2 = memoryManager.requestDefaultMemory();
+        final VirtualMemorySegment vms3 = memoryManager.requestDefaultMemory();
+        try (final WriteAccess writeAccess = vms1.getWriteAccess()) {
+            memoryManager.resize(0);
+        } finally {
+            memoryManager.close();
+        }
+
+    }
+
 }
