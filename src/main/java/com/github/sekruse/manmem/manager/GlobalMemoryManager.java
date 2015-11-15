@@ -416,4 +416,10 @@ public class GlobalMemoryManager implements MemoryManager {
             throw new CapacityExceededException("Could not resize the capacity as requested.");
         }
     }
+
+    @Override
+    public String toString() {
+        return String.format("GlobalMemoryManager[%d MB, %.1f%% used]",
+                capacity >>> 20, 100d * capacityUsage / capacity);
+    }
 }
