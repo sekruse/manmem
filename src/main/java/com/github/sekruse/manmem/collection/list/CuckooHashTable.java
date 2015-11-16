@@ -4,6 +4,7 @@ import com.github.sekruse.manmem.collection.IntHashFunction;
 import com.github.sekruse.manmem.collection.JenkinsHashFunction;
 import com.github.sekruse.manmem.manager.CapacityExceededException;
 import com.github.sekruse.manmem.manager.MemoryManager;
+import com.github.sekruse.manmem.manager.MemoryManagers;
 
 import java.util.Random;
 
@@ -57,6 +58,20 @@ public class CuckooHashTable extends AbstractIntTable {
     }
 
     /**
+     * Enlarge a given capacity so that it leverages the size of the underlying managed memory to the maximum.
+     *
+     * @param capacity      the input capacity
+     * @param memoryManager the {@link MemoryManager} that provides the managed memory
+     * @return the enlarged capacity
+     */
+    public static final long enlargeCapacity(long capacity, MemoryManager memoryManager) {
+        final long originallyRequiredMemory = capacity * 2 * Integer.BYTES; // 2 ints per entry
+        final long enlargedMemory =
+                MemoryManagers.fitMemoryToSegments(originallyRequiredMemory, memoryManager.getDefaultSegmentSize());
+        return enlargedMemory / (2 * Integer.BYTES); // 2 ints per entry
+    }
+
+    /**
      * Creates a new instance.
      *
      * @param capacity      number of maximum entries in the hash table
@@ -78,7 +93,8 @@ public class CuckooHashTable extends AbstractIntTable {
      */
     public CuckooHashTable(long capacity, MemoryManager memoryManager, int nullKey,
                            IntHashFunction.Factory hashFactory, Random random) {
-        super(capacity * 2, memoryManager);
+        super(enlargeCapacity(capacity, memoryManager) * 2, memoryManager);
+        capacity = enlargeCapacity(capacity, memoryManager); // Need to calculate twice, because of constructor rules.
 
         // Save some important constant values.
         this.nullKey = nullKey;
