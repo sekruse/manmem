@@ -152,10 +152,20 @@ public class MainMemorySegment implements Queueable<MainMemorySegment> {
      * @throws IllegalStateException if this {@link Queueable} is linked
      */
     public void shouldBeUnlinked() {
-        if (this.next != null || this.previous != null) {
+        if (!isUnlinked()) {
             throw new IllegalStateException("Segment is not unlinked.");
         }
     }
+
+
+    /**
+     * @return whether this object has no next and not previous element
+     */
+    public boolean isUnlinked() {
+        return this.next == null && this.previous == null;
+    }
+
+
 
     public VirtualMemorySegment getOwner() {
         return owner;

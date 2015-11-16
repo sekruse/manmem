@@ -265,15 +265,15 @@ public class VirtualMemorySegment {
      * Enqueues the {@link #mainMemorySegment} of the object into a suitable queue in
      * {@link com.github.sekruse.manmem.manager.MemoryManager} if there is no pending access request to it.
      */
-    private void enqueueIfNotAccessed() {
-        if (getMainMemorySegment() == null) {
-            throw new IllegalStateException("Cannot enqueue main memory segment, because there is none.");
+    synchronized void enqueueIfNotAccessed() {
+        // synchronized: if two threads are racing to enqueue this segment + segment gets polled -> problem
+        if (getMainMemorySegment() == null || !getMainMemorySegment().isUnlinked()) {
+            return;
         }
-        getMainMemorySegment().shouldBeUnlinked();
 
         if (this.writeLock.tryLock() && this.readSemaphore.tryAcquire(MAX_CONCURRENT_READS)) {
             getMainMemorySegmentLock().lock();
-            this.capabilities.enqueue(this.mainMemorySegment);
+            this.capabilities.enqueue(getMainMemorySegment());
             getMainMemorySegmentLock().unlock();
             this.readSemaphore.release(MAX_CONCURRENT_READS);
         }
