@@ -46,4 +46,11 @@ public class IntArray extends AbstractIntTable {
         super.clear(value);
     }
 
+    /**
+     * @return the number of fields
+     */
+    public long getCapacity() {
+        return this.sizeInInts;
+    }
+
 }

@@ -29,7 +29,12 @@ public class GlobalMemoryManager implements MemoryManager {
     /**
      * The used memory for created buffers in bytes. Must not exceed {@link #capacity}.
      */
-    private long capacityUsage = 0L;
+    private long allocatedCapacity = 0L;
+
+    /**
+     * The used memory for unused buffers in bytes. Must not exceed {@link #capacity}.
+     */
+    private long freeCapacity = 0L;
 
     /**
      * The capacity of a default piece of memory.
@@ -114,6 +119,7 @@ public class GlobalMemoryManager implements MemoryManager {
             switch (mainMemorySegment.getState()) {
                 case FREE:
                     GlobalMemoryManager.this.freeQueue.add(mainMemorySegment);
+                    GlobalMemoryManager.this.freeCapacity += mainMemorySegment.capacity();
                     break;
                 case BACKED:
                     GlobalMemoryManager.this.backedQueue.add(mainMemorySegment);
@@ -233,6 +239,7 @@ public class GlobalMemoryManager implements MemoryManager {
     private MainMemorySegment drawFreeSegment() {
         final MainMemorySegment freeSegment = this.freeQueue.poll();
         if (freeSegment != null) {
+            this.freeCapacity -= freeSegment.capacity();
             freeSegment.shouldBeInState(SegmentState.FREE);
             if (freeSegment.getOwner() != null) {
                 throw new IllegalStateException();
@@ -342,12 +349,12 @@ public class GlobalMemoryManager implements MemoryManager {
      * @return the created instance or {@code null} if there are no remaining capacities
      */
     synchronized private MainMemorySegment tryToCreateNewDefaultMainMemorySegment() {
-        if (this.capacityUsage + this.defaultMemorySize > this.capacity) {
+        if (this.allocatedCapacity + this.defaultMemorySize > this.capacity) {
             return null;
         }
 
         MainMemorySegment mainMemorySegment = new MainMemorySegment(this.defaultMemorySize);
-        this.capacityUsage += this.defaultMemorySize;
+        this.allocatedCapacity += this.defaultMemorySize;
         return mainMemorySegment;
     }
 
@@ -366,13 +373,18 @@ public class GlobalMemoryManager implements MemoryManager {
     }
 
     @Override
-    public long getCapacity() {
+    public long getMaximumCapacity() {
         return this.capacity;
     }
 
     @Override
-    public long getUsedCapacity() {
-        return this.capacityUsage;
+    public long getAllocatedCapacity() {
+        return this.allocatedCapacity;
+    }
+
+    @Override
+    public long getFreeCapacity() {
+        return this.freeCapacity;
     }
 
     @Override
@@ -383,23 +395,23 @@ public class GlobalMemoryManager implements MemoryManager {
         this.capacity = newCapacity;
 
         // If we need to shrink the main memory usage, go to the free segments at first.
-        while (this.capacityUsage > this.capacity) {
+        while (this.allocatedCapacity > this.capacity) {
             // Try to get a backed segment.
             final MainMemorySegment freeSegment = drawFreeSegment();
             if (freeSegment == null) break;
-            this.capacityUsage -= freeSegment.capacity();
+            this.allocatedCapacity -= freeSegment.capacity();
         }
 
         // Next, go to the backed segments.
-        while (this.capacityUsage > this.capacity) {
+        while (this.allocatedCapacity > this.capacity) {
             // Try to get a backed segment.
             final MainMemorySegment backedSegment = drawBackedSegment();
             if (backedSegment == null) break;
-            this.capacityUsage -= backedSegment.capacity();
+            this.allocatedCapacity -= backedSegment.capacity();
         }
 
         // When the eviction of free and backed segments was not sufficient, spill dirty segments and steal them.
-        while (this.capacityUsage > this.capacity) {
+        while (this.allocatedCapacity > this.capacity) {
             // Try to get a backed segment.
             final MainMemorySegment dirtySegment;
             try {
@@ -408,11 +420,11 @@ public class GlobalMemoryManager implements MemoryManager {
                 throw new ManagedMemoryException("Could not spill dirty segment when resizing the managed memory.", e);
             }
             if (dirtySegment == null) break;
-            this.capacityUsage -= dirtySegment.capacity();
+            this.allocatedCapacity -= dirtySegment.capacity();
         }
 
-        if (this.capacityUsage > this.capacity) {
-            this.capacity = this.capacityUsage;
+        if (this.allocatedCapacity > this.capacity) {
+            this.capacity = this.allocatedCapacity;
             throw new CapacityExceededException("Could not resize the capacity as requested.");
         }
     }
@@ -420,6 +432,6 @@ public class GlobalMemoryManager implements MemoryManager {
     @Override
     public String toString() {
         return String.format("GlobalMemoryManager[%d MB, %.1f%% used]",
-                capacity >>> 20, 100d * capacityUsage / capacity);
+                capacity >>> 20, 100d * allocatedCapacity / capacity);
     }
 }

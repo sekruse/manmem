@@ -29,12 +29,17 @@ public interface MemoryManager {
     /**
      * @return the main memory capacity (in bytes) assigned to this {@link MemoryManager}
      */
-    long getCapacity();
+    long getMaximumCapacity();
 
     /**
      * @return the main memory capacity (in bytes) used by this {@link MemoryManager}
      */
-    long getUsedCapacity();
+    long getAllocatedCapacity();
+
+    /**
+     * @return the main memory capacity (in bytes) used by this {@link MemoryManager}
+     */
+    long getFreeCapacity();
 
     /**
      * Change the capacity of managed main memory.
