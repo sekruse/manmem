@@ -39,6 +39,11 @@ public class AbstractIntTable implements Lockable {
     protected final long sizeInInts;
 
     /**
+     * The amount of managed memory consumed by this instance.
+     */
+    protected final long usedCapacity;
+
+    /**
      * Creates a new instance.
      *
      * @param size          number of {@code int}s in the array
@@ -71,6 +76,7 @@ public class AbstractIntTable implements Lockable {
             this.virtualMemorySegments[i] = this.memoryManager.requestDefaultMemory();
         }
         this.sizeInInts = size;
+        this.usedCapacity = this.virtualMemorySegments.length * memoryManager.getDefaultSegmentSize();
     }
 
     /**
@@ -258,5 +264,10 @@ public class AbstractIntTable implements Lockable {
                 memoryAccess.close();
             }
         }
+    }
+
+    @Override
+    public long getUsedCapacity() {
+        return this.usedCapacity;
     }
 }

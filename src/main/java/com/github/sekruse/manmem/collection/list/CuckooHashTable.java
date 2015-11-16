@@ -1,9 +1,9 @@
 package com.github.sekruse.manmem.collection.list;
 
 import com.github.sekruse.manmem.collection.IntHashFunction;
+import com.github.sekruse.manmem.collection.JenkinsHashFunction;
 import com.github.sekruse.manmem.manager.CapacityExceededException;
 import com.github.sekruse.manmem.manager.MemoryManager;
-import org.slf4j.LoggerFactory;
 
 import java.util.Random;
 
@@ -34,31 +34,51 @@ public class CuckooHashTable extends AbstractIntTable {
     private final Subtable[] subtables;
 
     /**
-     * Estimate the number of needed segments for a given number of entries and a load factor.
+     * Requires the required capacity for a new instance to host a number of entries with a certain load factor.
      *
-     * @param numEntries  the number expected entries
-     * @param loadFactor  the target load factor of the table
-     * @param segmentSize the number bytes in a segment
-     * @return the estimated number of segments
+     * @param numEntries the expected number of entries
+     * @param loadFactor the desired load factor
+     * @return the capacity for a new instance
      */
-    public static final int estimateNumSegments(int numEntries, double loadFactor, long segmentSize) {
-        int numNeededEntries = (int) Math.ceil(numEntries / loadFactor);
-        long neededSize = numNeededEntries * 2 * Integer.BYTES;
-        return (int) ((neededSize + segmentSize - 1) / segmentSize);
+    public static int calculateRequiredCapacity(int numEntries, double loadFactor) {
+        return (int) Math.ceil(numEntries / loadFactor);
+    }
+
+    /**
+     * Determine the amount of managed memory needed for a new instance..
+     *
+     * @param numEntries the number expected entries
+     * @param loadFactor the target load factor of the table
+     * @return the number of bytes required for the new instance
+     */
+    public static final long calculateRequiredMemory(int numEntries, double loadFactor) {
+        int requiredCapacity = calculateRequiredCapacity(numEntries, loadFactor);
+        return requiredCapacity * 2 * Integer.BYTES; // 2 ints per entry
     }
 
     /**
      * Creates a new instance.
      *
-     * @param size          number of maximum entries in the hash table
+     * @param capacity      number of maximum entries in the hash table
+     * @param memoryManager {@link MemoryManager} that manages the memory that back this array
+     * @param nullKey       value that is not allowed to be a key
+     */
+    public CuckooHashTable(long capacity, MemoryManager memoryManager, int nullKey) {
+        this(capacity, memoryManager, nullKey, new JenkinsHashFunction.Factory(), new Random());
+    }
+
+    /**
+     * Creates a new instance with custom hash functions and randomization.
+     *
+     * @param capacity      number of maximum entries in the hash table
      * @param memoryManager {@link MemoryManager} that manages the memory that back this array
      * @param nullKey       value that is not allowed to be a key
      * @param hashFactory   creates {@link IntHashFunction}s to operate this object
      * @param random        to get salts for the {@link IntHashFunction}s
      */
-    public CuckooHashTable(long size, MemoryManager memoryManager, int nullKey,
+    public CuckooHashTable(long capacity, MemoryManager memoryManager, int nullKey,
                            IntHashFunction.Factory hashFactory, Random random) {
-        super(size * 2, memoryManager);
+        super(capacity * 2, memoryManager);
 
         // Save some important constant values.
         this.nullKey = nullKey;
@@ -67,8 +87,8 @@ public class CuckooHashTable extends AbstractIntTable {
 
         // Create hash functions.
         this.subtables = new Subtable[2];
-        this.subtables[0] = new Subtable(this.hashFactory.create(this.random.nextInt()), 0L, size);
-        this.subtables[1] = new Subtable(this.hashFactory.create(this.random.nextInt()), size, size);
+        this.subtables[0] = new Subtable(this.hashFactory.create(this.random.nextInt()), 0L, capacity);
+        this.subtables[1] = new Subtable(this.hashFactory.create(this.random.nextInt()), capacity, capacity);
 
         // Initialize the data.
         clear();

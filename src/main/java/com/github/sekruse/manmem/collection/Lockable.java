@@ -22,7 +22,7 @@ public interface Lockable {
      * Lock this data structure for the purpose of writing. If it is already locked for reading, nothing happens.
      *
      * @throws CapacityExceededException if the locking requires more than available memory
-     * @throws IllegalStateException if the data structure is locked for reading
+     * @throws IllegalStateException     if the data structure is locked for reading
      */
     void lockForWrite() throws CapacityExceededException;
 
@@ -32,4 +32,8 @@ public interface Lockable {
      */
     void unlock();
 
+    /**
+     * @return the amount of virtual memory used by this object
+     */
+    long getUsedCapacity();
 }

@@ -5,6 +5,7 @@ import com.github.sekruse.manmem.collection.list.CuckooHashTable;
 import com.github.sekruse.manmem.manager.CapacityExceededException;
 import com.github.sekruse.manmem.manager.GlobalMemoryManager;
 import com.github.sekruse.manmem.manager.MemoryManager;
+import com.github.sekruse.manmem.manager.MemoryManagers;
 import it.unimi.dsi.fastutil.ints.*;
 import org.junit.Assert;
 import org.junit.Test;
@@ -41,8 +42,9 @@ public class CuckooHashTableTest {
 
         // Create an CuckooHashTable.
         final int segmentSize = 32 * KB;
-        final int numNeededSegments = CuckooHashTable.estimateNumSegments(numEntries, 0.5, segmentSize);
-        MemoryManager memoryManager = new GlobalMemoryManager(numNeededSegments * segmentSize, segmentSize);
+        final long requiredMemory = CuckooHashTable.calculateRequiredMemory(numEntries, 0.5);
+        final long ceiledRequiredMemory = MemoryManagers.fitMemoryToSegments(requiredMemory, segmentSize);
+        MemoryManager memoryManager = new GlobalMemoryManager(ceiledRequiredMemory * segmentSize, segmentSize);
         CuckooHashTable hashTable = new CuckooHashTable(numEntries * 2,
                 memoryManager,
                 noKey,
@@ -80,8 +82,9 @@ public class CuckooHashTableTest {
 
         // Create an CuckooHashTable.
         final int segmentSize = 32 * KB;
-        final int numNeededSegments = CuckooHashTable.estimateNumSegments(numEntries, 0.5, segmentSize);
-        MemoryManager memoryManager = new GlobalMemoryManager(numNeededSegments * segmentSize, segmentSize);
+        final long requiredMemory = CuckooHashTable.calculateRequiredMemory(numEntries, 0.5);
+        final long ceiledRequiredMemory = MemoryManagers.fitMemoryToSegments(requiredMemory, segmentSize);
+        MemoryManager memoryManager = new GlobalMemoryManager(ceiledRequiredMemory * segmentSize, segmentSize);
         CuckooHashTable hashTable = new CuckooHashTable(numEntries * 2,
                 memoryManager,
                 noKey,
@@ -122,8 +125,9 @@ public class CuckooHashTableTest {
 
         // Create an CuckooHashTable.
         final int segmentSize = 32 * KB;
-        final int numNeededSegments = CuckooHashTable.estimateNumSegments(numEntries, 0.5, segmentSize);
-        MemoryManager memoryManager = new GlobalMemoryManager(numNeededSegments * segmentSize, segmentSize);
+        final long requiredMemory = CuckooHashTable.calculateRequiredMemory(numEntries, 0.5);
+        final long ceiledRequiredMemory = MemoryManagers.fitMemoryToSegments(requiredMemory, segmentSize);
+        MemoryManager memoryManager = new GlobalMemoryManager(ceiledRequiredMemory * segmentSize, segmentSize);
         CuckooHashTable hashTable = new CuckooHashTable(numEntries * 2,
                 memoryManager,
                 noKey,
@@ -260,11 +264,14 @@ public class CuckooHashTableTest {
 
     @Test(expected = CapacityExceededException.class)
     public void testLockingCanBreakCapacities() {
-        final int numRequiredSegments = CuckooHashTable.estimateNumSegments(10, 1, 32);
-        MemoryManager memoryManager = new GlobalMemoryManager((numRequiredSegments - 1) * 32, 32);
+        final int segmentSize = 32;
+        final int hashTableCapacity = 10;
+        final int numRequiredSegments = MemoryManagers.requiredSegments(
+                CuckooHashTable.calculateRequiredMemory(hashTableCapacity, 1), segmentSize);
+        MemoryManager memoryManager = new GlobalMemoryManager((numRequiredSegments - 1) * segmentSize, segmentSize);
         try {
-            CuckooHashTable hashTable = new CuckooHashTable(10, memoryManager, -1, new JenkinsHashFunction.Factory(),
-                    new Random(42));
+            CuckooHashTable hashTable = new CuckooHashTable(hashTableCapacity, memoryManager, -1,
+                    new JenkinsHashFunction.Factory(), new Random(42));
             hashTable.lockForRead();
         } finally {
             memoryManager.close();
