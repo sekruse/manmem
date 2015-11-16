@@ -107,12 +107,19 @@ public class MemoryInputStream extends InputStream {
 
     @Override
     public long skip(long n) {
-        if (!updateCurrentVirtualMemorySegment() || n < 0) {
-            return 0;
+        while (true) {
+            if (!updateCurrentVirtualMemorySegment() || n < 0) {
+                return 0;
+            }
+            final int numRemainingBytes = this.readBuffer.remaining();
+            if (numRemainingBytes <= n) {
+                closeSegment();
+                return numRemainingBytes;
+            } else if (numRemainingBytes > 0) {
+                this.readBuffer.position(this.readBuffer.position() + (int) n);
+                return (int) n;
+            }
         }
-        final int numRemainingBytes = this.readBuffer.remaining();
-        closeSegment();
-        return numRemainingBytes;
     }
 
     /**
