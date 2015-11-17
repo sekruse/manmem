@@ -1,6 +1,7 @@
 package com.github.sekruse.manmem.memory;
 
 import com.github.sekruse.manmem.manager.CapacityExceededException;
+import com.github.sekruse.manmem.manager.capabilities.MemoryAccessException;
 import com.github.sekruse.manmem.manager.capabilities.MemoryCapabilities;
 import com.github.sekruse.manmem.util.QueueableQueue;
 
@@ -64,8 +65,10 @@ public class VirtualMemorySegment {
     /**
      * Release this memory so that it can be dropped or recycled. Calling this function declares that this memory
      * will no longer be used.
+     *
+     * @throws MemoryAccessException if there is still some {@link MemoryAccess} on this VirtualMemorySegment
      */
-    public void release() {
+    public void release() throws MemoryAccessException {
         if (this.writeLock.tryLock()) {
             if (this.readSemaphore.tryAcquire(MAX_CONCURRENT_READS)) {
                 dequeMainMemorySegment();
@@ -73,10 +76,10 @@ public class VirtualMemorySegment {
                 this.readSemaphore.release(MAX_CONCURRENT_READS);
             } else {
                 this.writeLock.unlock();
-                throw new IllegalStateException("Segment is still being read-accessed.");
+                throw new MemoryAccessException("Segment is still being read-accessed.");
             }
         } else {
-            throw new IllegalStateException("Segment is being write-accessed.");
+            throw new MemoryAccessException("Segment is being write-accessed.");
         }
     }
 
@@ -286,7 +289,7 @@ public class VirtualMemorySegment {
      */
     public void back() {
         if (!this.writeLock.tryLock()) {
-            throw new IllegalStateException("Cannot back segment that is currently being written.");
+            throw new MemoryAccessException("Cannot back segment that is currently being written.");
         }
         dequeMainMemorySegment();
         if (getMainMemorySegment() != null) {

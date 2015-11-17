@@ -1,8 +1,9 @@
 package com.github.sekruse.manmem.collection.list;
 
-import com.github.sekruse.manmem.collection.Lockable;
+import com.github.sekruse.manmem.collection.ManagedMemoryDataStructure;
 import com.github.sekruse.manmem.manager.CapacityExceededException;
 import com.github.sekruse.manmem.manager.MemoryManager;
+import com.github.sekruse.manmem.manager.capabilities.MemoryAccessException;
 import com.github.sekruse.manmem.memory.MemoryAccess;
 import com.github.sekruse.manmem.memory.VirtualMemorySegment;
 
@@ -11,7 +12,7 @@ import java.nio.ByteBuffer;
 /**
  * This class represents an array that is backed by {@link VirtualMemorySegment}s.
  */
-public class AbstractIntTable implements Lockable {
+public class AbstractIntTable implements ManagedMemoryDataStructure {
 
     /**
      * The {@link MemoryManager} that provides memory.
@@ -46,12 +47,12 @@ public class AbstractIntTable implements Lockable {
     /**
      * Creates a new instance.
      *
-     * @param size          number of {@code int}s in the array
+     * @param sizeInInts          number of {@code int}s in the array
      * @param memoryManager {@link MemoryManager} that manages the memory that back this array
      */
-    public AbstractIntTable(long size, MemoryManager memoryManager) {
+    public AbstractIntTable(long sizeInInts, MemoryManager memoryManager) {
         // Do some sanity checks.
-        if (size < 0) {
+        if (sizeInInts < 0) {
             throw new IllegalArgumentException();
         }
         if (memoryManager == null) {
@@ -66,7 +67,7 @@ public class AbstractIntTable implements Lockable {
         }
 
         // Allocate the data structures to hold VirtualMemorySegments and MemoryAccesses.
-        long sizeInBytes = size * Integer.BYTES;
+        long sizeInBytes = sizeInInts * Integer.BYTES;
         int numRequiredSegments = (int) ((sizeInBytes + this.defaultSegmentSize - 1) / this.defaultSegmentSize);
         this.virtualMemorySegments = new VirtualMemorySegment[numRequiredSegments];
         this.memoryAccesses = new MemoryAccess[numRequiredSegments];
@@ -75,7 +76,7 @@ public class AbstractIntTable implements Lockable {
         for (int i = 0; i < this.virtualMemorySegments.length; i++) {
             this.virtualMemorySegments[i] = this.memoryManager.requestDefaultMemory();
         }
-        this.sizeInInts = size;
+        this.sizeInInts = sizeInInts;
         this.usedCapacity = this.virtualMemorySegments.length * memoryManager.getDefaultSegmentSize();
     }
 
@@ -95,7 +96,7 @@ public class AbstractIntTable implements Lockable {
         boolean isExistingWriteAccess = access != null;
         if (isExistingWriteAccess) {
             if (!access.permitsWrite()) {
-                throw new IllegalStateException("Existing access does not permit writes.");
+                throw new MemoryAccessException("Existing access does not permit writes.");
             }
         } else {
             access = this.virtualMemorySegments[segmentIndex].getWriteAccess();
@@ -129,7 +130,7 @@ public class AbstractIntTable implements Lockable {
         final boolean isExistingAccess = access != null;
         if (isExistingAccess) {
             if (!access.permitsRead()) {
-                throw new IllegalStateException("Existing access does not permit reads.");
+                throw new MemoryAccessException("Existing access does not permit reads.");
             }
         } else {
             access = this.virtualMemorySegments[segmentIndex].getReadAccess();
@@ -269,5 +270,12 @@ public class AbstractIntTable implements Lockable {
     @Override
     public long getUsedCapacity() {
         return this.usedCapacity;
+    }
+
+    @Override
+    public void dispose() throws MemoryAccessException {
+        for (VirtualMemorySegment virtualMemorySegment : this.virtualMemorySegments) {
+            virtualMemorySegment.release();
+        }
     }
 }
