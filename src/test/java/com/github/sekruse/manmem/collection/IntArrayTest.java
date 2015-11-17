@@ -5,6 +5,7 @@ import com.github.sekruse.manmem.collection.list.IntArray;
 import com.github.sekruse.manmem.manager.CapacityExceededException;
 import com.github.sekruse.manmem.manager.GlobalMemoryManager;
 import com.github.sekruse.manmem.manager.MemoryManager;
+import com.github.sekruse.manmem.manager.capabilities.MemoryAccessException;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntIterator;
 import it.unimi.dsi.fastutil.ints.IntList;
@@ -160,7 +161,7 @@ public class IntArrayTest {
         return order;
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test(expected = MemoryAccessException.class)
     public void testWritingOnReadLockedIntArrayFails() {
         MemoryManager memoryManager = new GlobalMemoryManager(512, 32);
         try {
@@ -187,7 +188,7 @@ public class IntArrayTest {
         }
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test(expected = MemoryAccessException.class)
     public void testAcquiringWriteLockOnReadLockedIntArrayFails() {
         MemoryManager memoryManager = new GlobalMemoryManager(512, 32);
         try {

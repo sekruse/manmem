@@ -6,6 +6,7 @@ import com.github.sekruse.manmem.manager.CapacityExceededException;
 import com.github.sekruse.manmem.manager.GlobalMemoryManager;
 import com.github.sekruse.manmem.manager.MemoryManager;
 import com.github.sekruse.manmem.manager.MemoryManagers;
+import com.github.sekruse.manmem.manager.capabilities.MemoryAccessException;
 import it.unimi.dsi.fastutil.ints.*;
 import org.junit.Assert;
 import org.junit.Test;
@@ -193,7 +194,7 @@ public class CuckooHashTableTest {
         return keys;
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test(expected = MemoryAccessException.class)
     public void testWritingOnReadLockedCuckooHashTableFails() {
         MemoryManager memoryManager = new GlobalMemoryManager(512, 32);
         try {
@@ -222,7 +223,7 @@ public class CuckooHashTableTest {
         }
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test(expected = MemoryAccessException.class)
     public void testAcquiringWriteLockOnReadLockedCuckooHashTableFails() {
         MemoryManager memoryManager = new GlobalMemoryManager(512, 32);
         try {

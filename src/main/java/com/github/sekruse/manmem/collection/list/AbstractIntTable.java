@@ -200,7 +200,7 @@ public class AbstractIntTable implements ManagedMemoryDataStructure {
                 this.memoryAccesses[i] = this.virtualMemorySegments[i].getWriteAccess();
             } else {
                 if (!memoryAccess.permitsWrite()) {
-                    throw new IllegalStateException(String.format("Segment %d is locked without reading access.", i));
+                    throw new MemoryAccessException(String.format("Segment %d is locked without reading access.", i));
                 }
             }
         }
